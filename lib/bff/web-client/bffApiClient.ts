@@ -1,4 +1,5 @@
-import { retry, handleAll, ExponentialBackoff, timeout, TimeoutStrategy } from 'cockatiel';
+import { retry, handleAll, ExponentialBackoff, timeout, TimeoutStrategy, ConsecutiveBreaker, circuitBreaker, BrokenCircuitError } from 'cockatiel';
+import { endpoints, EndpointKey } from './endpoints';
 
 /**
  * BFFからWebAPIアプリケーションへのリクエストのベース設定
@@ -21,22 +22,69 @@ const DEFAULT_CONFIG = {
   retry: {
     maxAttempts: 3,
     backoff: {
-      initialDelay: 1000,
-      maxDelay: 5000
+      initialDelay: 1000,  // 初回リトライまでの待機時間（ミリ秒）
+      maxDelay: 5000      // 最大待機時間（ミリ秒）
     }
   }
 } as const;
 
-// リトライポリシーとタイムアウトポリシーの設定
-const createPolicies = (timeoutMs: number = DEFAULT_CONFIG.timeout) => {
+// サーキットブレーカーのマップ（エンドポイントごとに保持）
+const circuitBreakers = new Map<EndpointKey, ReturnType<typeof circuitBreaker>>();
+
+// エンドポイントキーを取得する関数
+const getEndpointKey = (endpoint: string): EndpointKey | undefined => {
+  return Object.entries(endpoints).find(
+    ([_, config]) => endpoint.startsWith(config.base)
+  )?.[0] as EndpointKey | undefined;
+};
+
+// サーキットブレーカーの設定型
+export type CircuitBreakerOptions = {
+  threshold: number;        // 失敗回数の閾値
+  duration: number;         // オープン状態の持続時間（ミリ秒）
+  minimumThroughput?: number; // 最小スループット（オプション）
+};
+
+// ポリシー作成関数
+const createPolicies = (endpoint: string, timeoutMs: number = DEFAULT_CONFIG.timeout) => {
+  // タイムアウトポリシーの作成
   const timeoutPolicy = timeout(timeoutMs, TimeoutStrategy.Aggressive);
+  
+  // リトライポリシーの作成
   const retryPolicy = retry(handleAll, {
     maxAttempts: DEFAULT_CONFIG.retry.maxAttempts,
-    backoff: new ExponentialBackoff(DEFAULT_CONFIG.retry.backoff)
+    backoff: new ExponentialBackoff({
+      initialDelay: DEFAULT_CONFIG.retry.backoff.initialDelay,
+      maxDelay: DEFAULT_CONFIG.retry.backoff.maxDelay,
+    }),
   });
 
-  return async (fn: () => Promise<any>) => {
-    return timeoutPolicy.execute(() => retryPolicy.execute(fn));
+  // エンドポイントに対応するサーキットブレーカー設定を取得
+  const endpointKey = getEndpointKey(endpoint);
+  if (!endpointKey) {
+    return async <T>(fn: () => Promise<T>): Promise<T> => {
+      return timeoutPolicy.execute(() => retryPolicy.execute(fn));
+    };
+  }
+
+  // サーキットブレーカーの取得または作成
+  let breakerPolicy = circuitBreakers.get(endpointKey);
+  if (!breakerPolicy) {
+    const config = endpoints[endpointKey].circuitBreaker;
+    breakerPolicy = circuitBreaker(handleAll, {
+      halfOpenAfter: config.duration,
+      breaker: new ConsecutiveBreaker(config.threshold)
+    });
+    circuitBreakers.set(endpointKey, breakerPolicy);
+  }
+
+  // ポリシーの組み合わせ
+  return async <T>(fn: () => Promise<T>): Promise<T> => {
+    return timeoutPolicy.execute(() => 
+      breakerPolicy.execute(() => 
+        retryPolicy.execute(fn)
+      )
+    );
   };
 };
 
@@ -51,7 +99,7 @@ export async function bffApiClient<T>(
   options: RequestInit & { timeoutMs?: number } = {}
 ): Promise<T> {
   const { timeoutMs, ...fetchOptions } = options;
-  const policy = createPolicies(timeoutMs);
+  const policy = createPolicies(endpoint, timeoutMs);
   
   const url = `${API_BASE_URL}${endpoint}`;
   const mergedOptions = {
@@ -63,26 +111,34 @@ export async function bffApiClient<T>(
     },
   };
 
-  // タイムアウトとリトライを含むフェッチの実行
-  const response = await policy(async () => {
-    const res = await fetch(url, mergedOptions);
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(JSON.stringify({
-        status: res.status,
-        statusText: res.statusText,
-        data: errorData,
-      }));
+  try {
+    // タイムアウトとリトライを含むフェッチの実行
+    const response = await policy(async () => {
+      const res = await fetch(url, mergedOptions);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(JSON.stringify({
+          status: res.status,
+          statusText: res.statusText,
+          data: errorData,
+        }));
+      }
+      return res;
+    });
+
+    // レスポンスがない場合（204 No Content）は空オブジェクトを返す
+    if (response.status === 204) {
+      return {} as T;
     }
-    return res;
-  });
 
-  // レスポンスがない場合（204 No Content）は空オブジェクトを返す
-  if (response.status === 204) {
-    return {} as T;
+    return response.json();
+  } catch (error) {
+    if (error instanceof BrokenCircuitError) {
+      const endpointKey = getEndpointKey(endpoint);
+      throw new Error(`Circuit breaker is open for endpoint type: ${endpointKey}`);
+    }
+    throw error;
   }
-
-  return response.json();
 }
 
 /**

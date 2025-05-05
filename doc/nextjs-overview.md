@@ -1509,7 +1509,7 @@ HTTPメソッド別のラッパー関数を用意することで、型安全性�
 ### タイムアウトとリトライ処理の実装（cockatiel）
 
 ```typescript
-import { retry, handleAll, ExponentialBackoff, timeout, TimeoutStrategy } from 'cockatiel';
+import { retry, handleAll, ExponentialBackoff, timeout, TimeoutStrategy, ConsecutiveBreaker, CircuitBreakerPolicy } from 'cockatiel';
 
 // デフォルトの設定
 const DEFAULT_CONFIG = {
@@ -1523,17 +1523,71 @@ const DEFAULT_CONFIG = {
   }
 } as const;
 
-// リトライポリシーとタイムアウトポリシーの設定
-const createPolicies = (timeoutMs: number = DEFAULT_CONFIG.timeout) => {
+// サーキットブレーカーの設定型
+type CircuitBreakerOptions = {
+  threshold: number;        // 失敗回数の閾値
+  duration: number;         // オープン状態の持続時間（ミリ秒）
+  minimumThroughput?: number; // 最小スループット（オプション）
+};
+
+// APIクライアントのオプション拡張
+type BffApiOptions = RequestInit & {
+  timeoutMs?: number;
+  circuitBreaker?: CircuitBreakerOptions;
+};
+
+// サーキットブレーカーのマップ（エンドポイントごとに保持）
+const circuitBreakers = new Map<string, CircuitBreakerPolicy>();
+
+// ポリシー作成関数の拡張
+const createPolicies = (endpoint: string, options: BffApiOptions) => {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_CONFIG.timeout;
   const timeoutPolicy = timeout(timeoutMs, TimeoutStrategy.Aggressive);
   const retryPolicy = retry(handleAll, {
     maxAttempts: DEFAULT_CONFIG.retry.maxAttempts,
     backoff: new ExponentialBackoff(DEFAULT_CONFIG.retry.backoff)
   });
 
+  // サーキットブレーカーの取得または作成
+  let circuitBreaker = circuitBreakers.get(endpoint);
+  if (options.circuitBreaker && !circuitBreaker) {
+    circuitBreaker = new ConsecutiveBreaker({
+      threshold: options.circuitBreaker.threshold,
+      duration: options.circuitBreaker.duration,
+      minimumThroughput: options.circuitBreaker.minimumThroughput
+    });
+    circuitBreakers.set(endpoint, circuitBreaker);
+  }
+
   return async (fn: () => Promise<any>) => {
+    if (circuitBreaker) {
+      return timeoutPolicy.execute(() => 
+        circuitBreaker.execute(() => 
+          retryPolicy.execute(fn)
+        )
+      );
+    }
     return timeoutPolicy.execute(() => retryPolicy.execute(fn));
   };
+};
+
+// 使用例
+const userApi = {
+  getUser: (id: string) => get<User>(`/api/users/${id}`, {
+    circuitBreaker: {
+      threshold: 5,      // 5回連続失敗でオープン
+      duration: 30000,   // 30秒間オープン状態を維持
+      minimumThroughput: 3  // 最低3回の呼び出しを要求
+    }
+  }),
+  
+  // 重要な操作はより慎重な設定
+  updateUserStatus: (id: string, status: UserStatus) => put<User>(`/api/users/${id}/status`, { status }, {
+    circuitBreaker: {
+      threshold: 3,      // 3回連続失敗でオープン
+      duration: 60000,   // 1分間オープン状態を維持
+    }
+  })
 };
 ```
 
@@ -1555,7 +1609,7 @@ async function bffApiClient<T>(
   options: RequestInit & { timeoutMs?: number } = {}
 ): Promise<T> {
   const { timeoutMs, ...fetchOptions } = options;
-  const policy = createPolicies(timeoutMs);
+  const policy = createPolicies(endpoint, options);
   
   const url = `${API_BASE_URL}${endpoint}`;
   const mergedOptions = {
