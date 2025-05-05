@@ -1,5 +1,5 @@
 import { retry, handleAll, ExponentialBackoff, timeout, TimeoutStrategy, ConsecutiveBreaker, circuitBreaker, BrokenCircuitError } from 'cockatiel';
-import { endpoints, EndpointKey } from './endpoints';
+import { EndpointKey, getEndpointUrl, getEndpointTimeout, getCircuitBreakerConfig } from './endpoints';
 
 /**
  * BFFからWebAPIアプリケーションへのリクエストのベース設定
@@ -18,7 +18,6 @@ const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:8080';
 
 // デフォルトの設定
 const DEFAULT_CONFIG = {
-  timeout: 10000,  // デフォルトタイムアウト: 10秒
   retry: {
     maxAttempts: 3,
     backoff: {
@@ -31,26 +30,11 @@ const DEFAULT_CONFIG = {
 // サーキットブレーカーのマップ（エンドポイントごとに保持）
 const circuitBreakers = new Map<EndpointKey, ReturnType<typeof circuitBreaker>>();
 
-// エンドポイントキーを取得する関数
-const getEndpointKey = (endpoint: string): EndpointKey | undefined => {
-  return Object.entries(endpoints).find(
-    ([_, config]) => endpoint.startsWith(config.base)
-  )?.[0] as EndpointKey | undefined;
-};
-
-// サーキットブレーカーの設定型
-export type CircuitBreakerOptions = {
-  threshold: number;        // 失敗回数の閾値
-  duration: number;         // オープン状態の持続時間（ミリ秒）
-  minimumThroughput?: number; // 最小スループット（オプション）
-};
-
 // ポリシー作成関数
-const createPolicies = (endpoint: string, timeoutMs: number = DEFAULT_CONFIG.timeout) => {
-  // タイムアウトポリシーの作成
+const createPolicies = (endpointKey: EndpointKey) => {
+  const timeoutMs = getEndpointTimeout(endpointKey);
   const timeoutPolicy = timeout(timeoutMs, TimeoutStrategy.Aggressive);
   
-  // リトライポリシーの作成
   const retryPolicy = retry(handleAll, {
     maxAttempts: DEFAULT_CONFIG.retry.maxAttempts,
     backoff: new ExponentialBackoff({
@@ -59,18 +43,9 @@ const createPolicies = (endpoint: string, timeoutMs: number = DEFAULT_CONFIG.tim
     }),
   });
 
-  // エンドポイントに対応するサーキットブレーカー設定を取得
-  const endpointKey = getEndpointKey(endpoint);
-  if (!endpointKey) {
-    return async <T>(fn: () => Promise<T>): Promise<T> => {
-      return timeoutPolicy.execute(() => retryPolicy.execute(fn));
-    };
-  }
-
-  // サーキットブレーカーの取得または作成
   let breakerPolicy = circuitBreakers.get(endpointKey);
   if (!breakerPolicy) {
-    const config = endpoints[endpointKey].circuitBreaker;
+    const config = getCircuitBreakerConfig(endpointKey);
     breakerPolicy = circuitBreaker(handleAll, {
       halfOpenAfter: config.duration,
       breaker: new ConsecutiveBreaker(config.threshold)
@@ -78,8 +53,7 @@ const createPolicies = (endpoint: string, timeoutMs: number = DEFAULT_CONFIG.tim
     circuitBreakers.set(endpointKey, breakerPolicy);
   }
 
-  // ポリシーの組み合わせ
-  return async <T>(fn: () => Promise<T>): Promise<T> => {
+  return async <R>(fn: () => Promise<R>): Promise<R> => {
     return timeoutPolicy.execute(() => 
       breakerPolicy.execute(() => 
         retryPolicy.execute(fn)
@@ -90,29 +64,25 @@ const createPolicies = (endpoint: string, timeoutMs: number = DEFAULT_CONFIG.tim
 
 /**
  * WebAPIアプリケーションへのリクエストを行うクライアント
- * @param endpoint - エンドポイントのパス（例: '/api/users'）
- * @param options - フェッチオプション
- * @returns レスポンスデータ
  */
-export async function bffApiClient<T>(
-  endpoint: string,
-  options: RequestInit & { timeoutMs?: number } = {}
-): Promise<T> {
-  const { timeoutMs, ...fetchOptions } = options;
-  const policy = createPolicies(endpoint, timeoutMs);
+export async function bffApiClient<R>(
+  endpointKey: EndpointKey,
+  params: Record<string, string> = {},
+  options: RequestInit = {}
+): Promise<R> {
+  const policy = createPolicies(endpointKey);
+  const url = getEndpointUrl(endpointKey, params);
   
-  const url = `${API_BASE_URL}${endpoint}`;
   const mergedOptions = {
     ...baseConfig,
-    ...fetchOptions,
+    ...options,
     headers: {
       ...baseConfig.headers,
-      ...fetchOptions.headers,
+      ...options.headers,
     },
   };
 
   try {
-    // タイムアウトとリトライを含むフェッチの実行
     const response = await policy(async () => {
       const res = await fetch(url, mergedOptions);
       if (!res.ok) {
@@ -126,70 +96,71 @@ export async function bffApiClient<T>(
       return res;
     });
 
-    // レスポンスがない場合（204 No Content）は空オブジェクトを返す
     if (response.status === 204) {
-      return {} as T;
+      return {} as R;
     }
 
     return response.json();
   } catch (error) {
     if (error instanceof BrokenCircuitError) {
-      const endpointKey = getEndpointKey(endpoint);
-      throw new Error(`Circuit breaker is open for endpoint type: ${endpointKey}`);
+      throw new Error(`Circuit breaker is open for endpoint: ${endpointKey}`);
     }
     throw error;
   }
 }
 
 /**
- * GETリクエスト
+ * APIクライアントを生成する型
  */
-export function get<T>(endpoint: string, options: RequestInit = {}) {
-  return bffApiClient<T>(endpoint, {
-    ...options,
-    method: 'GET',
+type ApiClient = {
+  [E in EndpointKey]: {
+    get(params?: Record<string, string>, options?: Omit<RequestInit, 'method'>): Promise<unknown>;
+    post(data: unknown, params?: Record<string, string>, options?: Omit<RequestInit, 'method' | 'body'>): Promise<unknown>;
+    put(data: unknown, params?: Record<string, string>, options?: Omit<RequestInit, 'method' | 'body'>): Promise<unknown>;
+    delete(params?: Record<string, string>, options?: Omit<RequestInit, 'method'>): Promise<unknown>;
+    patch(data: unknown, params?: Record<string, string>, options?: Omit<RequestInit, 'method' | 'body'>): Promise<unknown>;
+  };
+};
+
+/**
+ * APIクライアントを生成する
+ */
+function createApiClient(): ApiClient {
+  return new Proxy({} as ApiClient, {
+    get(target, endpointKey: EndpointKey) {
+      return {
+        get: <R>(params?: Record<string, string>, options?: Omit<RequestInit, 'method'>) =>
+          bffApiClient<R>(endpointKey, params, { ...options, method: 'GET' }),
+
+        post: <R>(data: unknown, params?: Record<string, string>, options?: Omit<RequestInit, 'method' | 'body'>) =>
+          bffApiClient<R>(endpointKey, params, {
+            ...options,
+            method: 'POST',
+            body: JSON.stringify(data),
+          }),
+
+        put: <R>(data: unknown, params?: Record<string, string>, options?: Omit<RequestInit, 'method' | 'body'>) =>
+          bffApiClient<R>(endpointKey, params, {
+            ...options,
+            method: 'PUT',
+            body: JSON.stringify(data),
+          }),
+
+        delete: <R>(params?: Record<string, string>, options?: Omit<RequestInit, 'method'>) =>
+          bffApiClient<R>(endpointKey, params, { ...options, method: 'DELETE' }),
+
+        patch: <R>(data: unknown, params?: Record<string, string>, options?: Omit<RequestInit, 'method' | 'body'>) =>
+          bffApiClient<R>(endpointKey, params, {
+            ...options,
+            method: 'PATCH',
+            body: JSON.stringify(data),
+          }),
+      };
+    },
   });
 }
 
 /**
- * POSTリクエスト
+ * APIクライアントのインスタンス
  */
-export function post<T>(endpoint: string, data: unknown, options: RequestInit = {}) {
-  return bffApiClient<T>(endpoint, {
-    ...options,
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-/**
- * PUTリクエスト
- */
-export function put<T>(endpoint: string, data: unknown, options: RequestInit = {}) {
-  return bffApiClient<T>(endpoint, {
-    ...options,
-    method: 'PUT',
-    body: JSON.stringify(data),
-  });
-}
-
-/**
- * DELETEリクエスト
- */
-export function del<T>(endpoint: string, options: RequestInit = {}) {
-  return bffApiClient<T>(endpoint, {
-    ...options,
-    method: 'DELETE',
-  });
-}
-
-/**
- * PATCHリクエスト
- */
-export function patch<T>(endpoint: string, data: unknown, options: RequestInit = {}) {
-  return bffApiClient<T>(endpoint, {
-    ...options,
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-} 
+export const api = createApiClient(); 
