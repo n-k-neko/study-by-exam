@@ -1503,22 +1503,38 @@ const memoizedObject = useMemo(() => ({
 ## BFFのAPIクライアント実装
 
 ### 概要
-BFFからWebAPIアプリケーションへの通信には、Web標準の`fetch` APIを使用し、リトライ処理には`cockatiel`ライブラリを利用します。
+BFFからWebAPIアプリケーションへの通信には、Web標準の`fetch` APIを使用し、タイムアウトとリトライ処理には`cockatiel`ライブラリを利用します。
 HTTPメソッド別のラッパー関数を用意することで、型安全性と使いやすさを向上させています。
 
-### リトライ処理の実装（cockatiel）
+### タイムアウトとリトライ処理の実装（cockatiel）
 
 ```typescript
-import { retry, handleAll, ExponentialBackoff } from 'cockatiel';
+import { retry, handleAll, ExponentialBackoff, timeout, TimeoutStrategy } from 'cockatiel';
 
-// リトライポリシーの設定
-const retryPolicy = retry(handleAll, {
-  maxAttempts: 3,
-  backoff: new ExponentialBackoff({
-    initialDelay: 1000,  // 初回リトライまでの待機時間（ミリ秒）
-    maxDelay: 5000      // 最大待機時間（ミリ秒）
-  })
-});
+// デフォルトの設定
+const DEFAULT_CONFIG = {
+  timeout: 10000,  // デフォルトタイムアウト: 10秒
+  retry: {
+    maxAttempts: 3,
+    backoff: {
+      initialDelay: 1000,  // 初回リトライまでの待機時間（ミリ秒）
+      maxDelay: 5000      // 最大待機時間（ミリ秒）
+    }
+  }
+} as const;
+
+// リトライポリシーとタイムアウトポリシーの設定
+const createPolicies = (timeoutMs: number = DEFAULT_CONFIG.timeout) => {
+  const timeoutPolicy = timeout(timeoutMs, TimeoutStrategy.Aggressive);
+  const retryPolicy = retry(handleAll, {
+    maxAttempts: DEFAULT_CONFIG.retry.maxAttempts,
+    backoff: new ExponentialBackoff(DEFAULT_CONFIG.retry.backoff)
+  });
+
+  return async (fn: () => Promise<any>) => {
+    return timeoutPolicy.execute(() => retryPolicy.execute(fn));
+  };
+};
 ```
 
 ### APIクライアントの基本構造
@@ -1536,20 +1552,23 @@ const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:8080';
 // 共通のクライアント関数
 async function bffApiClient<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit & { timeoutMs?: number } = {}
 ): Promise<T> {
+  const { timeoutMs, ...fetchOptions } = options;
+  const policy = createPolicies(timeoutMs);
+  
   const url = `${API_BASE_URL}${endpoint}`;
   const mergedOptions = {
     ...baseConfig,
-    ...options,
+    ...fetchOptions,
     headers: {
       ...baseConfig.headers,
-      ...options.headers,
+      ...fetchOptions.headers,
     },
   };
 
-  // リトライ処理を含むフェッチの実行
-  const response = await retryPolicy.execute(async () => {
+  // タイムアウトとリトライを含むフェッチの実行
+  const response = await policy(async () => {
     const res = await fetch(url, mergedOptions);
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
@@ -1562,9 +1581,11 @@ async function bffApiClient<T>(
     return res;
   });
 
+  // レスポンスがない場合（204 No Content）は空オブジェクトを返す
   if (response.status === 204) {
     return {} as T;
   }
+
   return response.json();
 }
 ```
@@ -1604,16 +1625,18 @@ export function post<T>(endpoint: string, data: unknown, options: RequestInit = 
 - デフォルト値の提供
 - カスタムヘッダーの追加
 - メソッド固有の設定の強制
+- タイムアウト時間のカスタマイズ
 が可能になります。
 
 ### 使用例
 
 ```typescript
-// GETリクエスト
+// GETリクエスト（デフォルトのタイムアウト）
 const user = await get<User>('/api/users/1');
 
-// POSTリクエスト（カスタムヘッダー付き）
+// POSTリクエスト（カスタムタイムアウトとヘッダー）
 const newUser = await post<User>('/api/users', userData, {
+  timeoutMs: 5000,  // 5秒でタイムアウト
   headers: {
     'Authorization': `Bearer ${token}`
   }

@@ -1,4 +1,4 @@
-import { retry, handleAll, ExponentialBackoff } from 'cockatiel';
+import { retry, handleAll, ExponentialBackoff, timeout, TimeoutStrategy } from 'cockatiel';
 
 /**
  * BFFからWebAPIアプリケーションへのリクエストのベース設定
@@ -15,14 +15,30 @@ const baseConfig = {
  */
 const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:8080';
 
-// リトライポリシーの設定
-const retryPolicy = retry(handleAll, {
-  maxAttempts: 3,
-  backoff: new ExponentialBackoff({
-    initialDelay: 1000,
-    maxDelay: 5000
-  })
-});
+// デフォルトの設定
+const DEFAULT_CONFIG = {
+  timeout: 10000,  // デフォルトタイムアウト: 10秒
+  retry: {
+    maxAttempts: 3,
+    backoff: {
+      initialDelay: 1000,
+      maxDelay: 5000
+    }
+  }
+} as const;
+
+// リトライポリシーとタイムアウトポリシーの設定
+const createPolicies = (timeoutMs: number = DEFAULT_CONFIG.timeout) => {
+  const timeoutPolicy = timeout(timeoutMs, TimeoutStrategy.Aggressive);
+  const retryPolicy = retry(handleAll, {
+    maxAttempts: DEFAULT_CONFIG.retry.maxAttempts,
+    backoff: new ExponentialBackoff(DEFAULT_CONFIG.retry.backoff)
+  });
+
+  return async (fn: () => Promise<any>) => {
+    return timeoutPolicy.execute(() => retryPolicy.execute(fn));
+  };
+};
 
 /**
  * WebAPIアプリケーションへのリクエストを行うクライアント
@@ -32,24 +48,25 @@ const retryPolicy = retry(handleAll, {
  */
 export async function bffApiClient<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit & { timeoutMs?: number } = {}
 ): Promise<T> {
+  const { timeoutMs, ...fetchOptions } = options;
+  const policy = createPolicies(timeoutMs);
+  
   const url = `${API_BASE_URL}${endpoint}`;
   const mergedOptions = {
     ...baseConfig,
-    ...options,
+    ...fetchOptions,
     headers: {
       ...baseConfig.headers,
-      ...options.headers,
+      ...fetchOptions.headers,
     },
   };
 
-  // リトライ処理を含むフェッチの実行
-  const response = await retryPolicy.execute(async () => {
+  // タイムアウトとリトライを含むフェッチの実行
+  const response = await policy(async () => {
     const res = await fetch(url, mergedOptions);
-    
     if (!res.ok) {
-      // エラーレスポンスの詳細を取得
       const errorData = await res.json().catch(() => ({}));
       throw new Error(JSON.stringify({
         status: res.status,
@@ -57,7 +74,6 @@ export async function bffApiClient<T>(
         data: errorData,
       }));
     }
-
     return res;
   });
 
