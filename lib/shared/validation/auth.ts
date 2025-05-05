@@ -1,0 +1,28 @@
+import { z } from 'zod';
+
+export const loginSchema = z.object({
+  loginId: z.string()
+    .min(3, 'ユーザーIDまたはメールアドレスは3文字以上である必要があります')
+    .max(50, 'ユーザーIDまたはメールアドレスは50文字以下である必要があります'),
+  password: z.string()
+    .min(8, 'パスワードは8文字以上である必要があります'),
+});
+
+export const registerSchema = z.object({
+  userId: z.string()
+    .min(3, 'ユーザーIDは3文字以上である必要があります')
+    .max(20, 'ユーザーIDは20文字以下である必要があります')
+    .regex(/^[a-zA-Z0-9_]+$/, 'ユーザーIDは英数字とアンダースコアのみ使用できます'),
+  email: z.string()
+    .email('有効なメールアドレスを入力してください'),
+  password: z.string()
+    .min(8, 'パスワードは8文字以上である必要があります')
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, 'パスワードは大文字、小文字、数字を含む必要があります'),
+  confirmPassword: z.string()
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'パスワードが一致しません',
+  path: ['confirmPassword'],
+});
+
+export type LoginFormData = z.infer<typeof loginSchema>;
+export type RegisterFormData = z.infer<typeof registerSchema>; 
