@@ -1696,3 +1696,454 @@ const newUser = await post<User>('/api/users', userData, {
   }
 });
 ```
+
+## BFFからWebAPIへの通信実装
+
+### アーキテクチャの概要
+
+BFFからWebAPIへの通信実装は、以下のような構造で整理します：
+
+```
+/web-client
+  /infrastructure  # 技術的実装
+    bffApiClient.ts
+  endpoints.ts     # エンドポイント定義
+  types.ts        # 型定義
+  apiClient.ts    # APIクライアントインターフェース
+  index.ts        # エントリーポイント
+```
+
+### エンドポイントの定義（endpoints.ts）
+
+```typescript
+export const domains = {
+  userApi: process.env.USER_API_DOMAIN ?? 'http://localhost:8081',
+  examApi: process.env.EXAM_API_DOMAIN ?? 'http://localhost:8082',
+  adminApi: process.env.ADMIN_API_DOMAIN ?? 'http://localhost:8083',
+} as const;
+
+// サーキットブレーカーの設定型
+export type CircuitBreakerOptions = {
+  threshold: number;
+  duration: number;
+  minimumThroughput?: number;
+};
+
+// リトライの設定型
+export type RetryOptions = {
+  maxAttempts: number;
+  backoff: {
+    initialDelay: number;
+    maxDelay: number;
+  };
+};
+
+// エンドポイントの設定例
+const endpointConfigs = {
+  user: {
+    domain: 'userApi' as const,
+    defaultTimeout: 5000,
+    circuitBreaker: {
+      threshold: 5,
+      duration: 30000,
+      minimumThroughput: 3
+    },
+    retry: {
+      maxAttempts: 3,
+      backoff: {
+        initialDelay: 1000,
+        maxDelay: 5000
+      }
+    },
+    endpoints: {
+      getUser: {
+        path: '/users/:id',
+      },
+      createUser: {
+        path: '/users',
+        timeout: 10000,
+      },
+    },
+  },
+  // ... 他のドメイン
+};
+```
+
+### APIクライアントの実装（apiClient.ts）
+
+```typescript
+export type ApiClient = {
+  [E in ApiEndpointKey]: HttpMethods<unknown>;
+};
+
+export function createApiClient(implementation: IApiClient): ApiClient {
+  return new Proxy({} as ApiClient, {
+    get(target, endpointKey: ApiEndpointKey) {
+      return {
+        get: <R>(params?: CommonParams, options?: Omit<RequestInit, 'method'>) =>
+          implementation.request<R>(endpointKey, 'GET', params, undefined, options),
+
+        post: <R>(data: unknown, params?: CommonParams, options?: CommonOptions) =>
+          implementation.request<R>(endpointKey, 'POST', params, data, options),
+
+        // ... 他のHTTPメソッド
+      };
+    },
+  });
+}
+```
+
+### BFFApiClientの実装（infrastructure/bffApiClient.ts）
+
+```typescript
+export class BffApiClient implements IApiClient {
+  async request<R>(
+    endpointKey: ApiEndpointKey,
+    method: string,
+    params: CommonParams = {},
+    data?: unknown,
+    options: CommonOptions = {}
+  ): Promise<R> {
+    const policy = createPolicies(endpointKey);
+    const url = getEndpointUrl(endpointKey, params);
+    
+    const mergedOptions = {
+      ...baseConfig,
+      ...options,
+      method,
+      headers: {
+        ...baseConfig.headers,
+        ...options.headers,
+      },
+      ...(data ? { body: JSON.stringify(data) } : {})
+    };
+
+    try {
+      const response = await policy(async () => {
+        const res = await fetch(url, mergedOptions);
+        if (!res.ok) {
+          throw new Error(JSON.stringify({
+            status: res.status,
+            statusText: res.statusText,
+            data: await res.json().catch(() => ({})),
+          }));
+        }
+        return res;
+      });
+
+      return response.status === 204 ? {} as R : response.json();
+    } catch (error) {
+      if (error instanceof BrokenCircuitError) {
+        throw new Error(`Circuit breaker is open for endpoint: ${endpointKey}`);
+      }
+      throw error;
+    }
+  }
+}
+```
+
+### 使用例
+
+```typescript
+// APIクライアントのインスタンス作成
+const api = createApiClient(new BffApiClient());
+
+// 使用例
+const user = await api.getUser.get<User>({ id: '123' });
+const exams = await api.getExams.get<Exam[]>();
+const result = await api.submitExam.post<ExamResult>(data, { id: examId });
+```
+
+### 設計上の利点
+
+1. **エンドポイント管理の容易さ**
+   - `endpoints.ts`の修正のみでエンドポイントの追加が可能
+   - 設定の一元管理
+
+2. **型安全性**
+   - TypeScriptの型システムによる安全性確保
+   - コンパイル時のエラー検出
+
+3. **インフラストラクチャの隠蔽**
+   - 実装詳細をBffApiClientに閉じ込め
+   - クリーンなインターフェース提供
+
+4. **テスト容易性**
+   - モック化が容易
+   - インターフェースベースの設計
+
+5. **エラーハンドリング**
+   - サーキットブレーカーによる障害対策
+   - リトライ処理による回復性
+   - タイムアウト制御
+
+6. **拡張性**
+   - 新しいHTTPメソッドの追加が容易
+   - ミドルウェアパターンの適用が可能
+
+### createApiClientの詳細解説
+
+`createApiClient`関数は、JavaScriptのProxyオブジェクトを使用して、動的なAPIクライアントを生成します。この実装の詳細を見ていきましょう。
+
+#### Proxyオブジェクトの基本
+
+```typescript
+export function createApiClient(implementation: IApiClient): ApiClient {
+  return new Proxy({} as ApiClient, {
+    get(target, endpointKey: ApiEndpointKey) {
+      // ...
+    }
+  });
+}
+```
+
+1. **Proxyとは**
+   - JavaScriptのビルトイン機能
+   - オブジェクトの基本操作（プロパティの取得、設定など）をカスタマイズ可能
+   - 動的なプロパティアクセスを実現
+
+2. **引数の説明**
+   - `target`: Proxyのターゲットオブジェクト（今回は空オブジェクト）
+   - `endpointKey`: アクセスされたプロパティ名（例：`'getUser'`）
+   - `implementation`: 実際のAPI呼び出しを行うクライアントの実装
+
+#### 動的なメソッドチェーンの仕組み
+
+```typescript
+// 使用例
+const user = await api.getUser.get<User>({ id: '123' });
+```
+
+この呼び出しの内部動作：
+
+1. `api.getUser`にアクセス
+   ```typescript
+   get(target, endpointKey: ApiEndpointKey) {
+     // endpointKey = 'getUser'
+     return {
+       get: <R>(params?: CommonParams, options?: Omit<RequestInit, 'method'>) => // ...
+       post: <R>(data: unknown, params?: CommonParams, options?: CommonOptions) => // ...
+     };
+   }
+   ```
+   - Proxyの`get`トラップが呼び出される
+   - `endpointKey`に`'getUser'`が設定される
+   - HTTPメソッド（get, post等）を持つオブジェクトを返す
+
+2. `.get()`メソッドの呼び出し
+   ```typescript
+   get: <R>(params?: CommonParams, options?: Omit<RequestInit, 'method'>) =>
+     implementation.request<R>(endpointKey, 'GET', params, undefined, options)
+   ```
+   - 返されたオブジェクトの`get`メソッドが実行される
+   - `implementation.request`を呼び出し、実際のリクエストを実行
+
+#### 型システムとの連携
+
+```typescript
+export type ApiClient = {
+  [E in ApiEndpointKey]: HttpMethods<unknown>;
+};
+
+type HttpMethods<T> = {
+  get: <R = T>(params?: CommonParams, options?: Omit<RequestInit, 'method'>) => Promise<R>;
+  post: <R = T>(data: unknown, params?: CommonParams, options?: CommonOptions) => Promise<R>;
+  // ... 他のHTTPメソッド
+};
+```
+
+1. **型の役割**
+   - `ApiClient`: エンドポイントとHTTPメソッドの対応を定義
+   - `HttpMethods`: 各エンドポイントで利用可能なメソッドを定義
+   - ジェネリック型による戻り値の型指定
+
+2. **型安全性の確保**
+   - 存在しないエンドポイントへのアクセスをコンパイル時に検出
+   - メソッドの引数の型チェック
+   - レスポンスの型推論
+
+#### 実装のメリット
+
+1. **使いやすさ**
+   ```typescript
+   // 直感的なAPI呼び出し
+   const user = await api.getUser.get<User>({ id: '123' });
+   const result = await api.submitExam.post<ExamResult>(data, { id: examId });
+   ```
+
+2. **型安全性**
+   ```typescript
+   // コンパイルエラーになる例
+   const invalid = await api.nonExistentEndpoint.get(); // エンドポイントが存在しない
+   const wrongType = await api.getUser.get<number>(); // 型が不一致
+   ```
+
+3. **拡張性**
+   ```typescript
+   // 新しいHTTPメソッドの追加が容易
+   type HttpMethods<T> = {
+     // 既存のメソッド
+     get: <R = T>(params?: CommonParams) => Promise<R>;
+     post: <R = T>(data: unknown, params?: CommonParams) => Promise<R>;
+     // 新しいメソッド
+     patch: <R = T>(data: unknown, params?: CommonParams) => Promise<R>;
+   };
+   ```
+
+4. **実装の分離**
+   - インターフェース（`IApiClient`）による実装の抽象化
+   - テスト時のモック化が容易
+   - 異なる実装への切り替えが可能
+
+このように、`createApiClient`は、型安全で使いやすいAPIクライアントを実現する重要な役割を果たしています。Proxyを使用することで、エンドポイントの追加や変更に柔軟に対応できる設計となっています。
+
+### エンドポイントオブジェクトの構造と生成
+
+`endpoints.ts`で定義されたエンドポイントは、以下のような処理で平坦化され、使いやすい形に変換されます：
+
+```typescript
+// エンドポイントの設定を平坦化する処理
+export const endpoints = Object.entries(endpointConfigs).reduce((acc, [_, domainConfig]) => {
+  const endpoints = Object.entries(domainConfig.endpoints).reduce((endpointAcc, [key, endpoint]) => {
+    return {
+      ...endpointAcc,
+      [key]: {
+        domain: domainConfig.domain,
+        path: endpoint.path,
+        timeout: endpoint.timeout ?? domainConfig.defaultTimeout,
+        circuitBreaker: domainConfig.circuitBreaker,
+        retry: (endpoint as any).retry ?? domainConfig.retry,
+      },
+    };
+  }, {});
+  return { ...acc, ...endpoints };
+}, {}) as Record<string, EndpointInternalConfig>;
+```
+
+#### 変換前後の構造
+
+1. **変換前（入力）**：階層的な構造
+```typescript
+const endpointConfigs = {
+  user: {  // ドメイン
+    domain: 'userApi',
+    defaultTimeout: 5000,
+    circuitBreaker: { /* ... */ },
+    retry: { /* ... */ },
+    endpoints: {
+      getUser: { path: '/users/:id' },
+      createUser: { 
+        path: '/users',
+        timeout: 10000
+      }
+    }
+  },
+  exam: {  // 別のドメイン
+    // ... 同様の構造
+  }
+};
+```
+
+2. **変換後（出力）**：平坦化された構造
+```typescript
+const endpoints = {
+  getUser: {
+    domain: 'userApi',
+    path: '/users/:id',
+    timeout: 5000,  // defaultTimeoutから継承
+    circuitBreaker: { /* ドメインの設定 */ },
+    retry: { /* ドメインの設定 */ }
+  },
+  createUser: {
+    domain: 'userApi',
+    path: '/users',
+    timeout: 10000,  // エンドポイント固有の設定
+    circuitBreaker: { /* ドメインの設定 */ },
+    retry: { /* ドメインの設定 */ }
+  },
+  // ... 他のエンドポイント
+};
+```
+
+#### 設定の継承メカニズム
+
+1. **デフォルト値の適用**
+   - タイムアウト：エンドポイント固有の設定 → ドメインのデフォルト値
+   - リトライ設定：エンドポイント固有の設定 → ドメインの設定
+   - サーキットブレーカー：ドメインレベルで共有
+
+2. **設定のマージ順序**
+   ```typescript
+   {
+     // 1. ドメインの基本設定
+     domain: domainConfig.domain,
+     
+     // 2. エンドポイントのパス
+     path: endpoint.path,
+     
+     // 3. タイムアウト（エンドポイント固有またはデフォルト）
+     timeout: endpoint.timeout ?? domainConfig.defaultTimeout,
+     
+     // 4. 共有設定
+     circuitBreaker: domainConfig.circuitBreaker,
+     retry: (endpoint as any).retry ?? domainConfig.retry,
+   }
+   ```
+
+#### エンドポイントURLの解決
+
+```typescript
+export function getEndpointUrl(
+  endpointKey: ApiEndpointKey,
+  params: Record<string, string> = {}
+): string {
+  const endpoint = endpoints[endpointKey];
+  let resolvedPath = endpoint.path;
+
+  // パスパラメータの置換
+  Object.entries(params).forEach(([key, value]) => {
+    resolvedPath = resolvedPath.replace(`:${key}`, value);
+  });
+
+  // 完全なURLの生成
+  return `${domains[endpoint.domain]}${resolvedPath}`;
+}
+```
+
+#### 使用例
+
+```typescript
+// エンドポイントの定義
+const endpoints = {
+  getUser: {
+    domain: 'userApi',
+    path: '/users/:id',
+    timeout: 5000
+  }
+};
+
+// URLの解決
+const url = getEndpointUrl('getUser', { id: '123' });
+// 結果: 'http://localhost:8081/users/123'
+
+// APIクライアントでの使用
+const user = await api.getUser.get<User>({ id: '123' });
+```
+
+このように、エンドポイントの定義は階層的な構造から平坦な構造に変換され、それぞれのエンドポイントに必要な設定が適切に継承されます。この構造により：
+
+1. **設定の一元管理**
+   - ドメインレベルでのデフォルト値の設定
+   - 共通設定の効率的な管理
+
+2. **柔軟なカスタマイズ**
+   - エンドポイントごとの設定上書き
+   - 必要に応じた細かな制御
+
+3. **使いやすさ**
+   - シンプルな形式でのエンドポイント参照
+   - 直感的なURL解決
+
+4. **保守性**
+   - 設定変更の影響範囲が明確
+   - コードの見通しの良さ

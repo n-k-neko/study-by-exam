@@ -1,3 +1,5 @@
+import { ApiEndpointKey } from './types';
+
 /**
  * APIドメインの設定
  */
@@ -11,9 +13,9 @@ export const domains = {
  * サーキットブレーカーの設定型
  */
 export type CircuitBreakerOptions = {
-  threshold: number;        // 失敗回数の閾値
-  duration: number;         // オープン状態の持続時間（ミリ秒）
-  minimumThroughput?: number; // 最小スループット（オプション）
+  threshold: number;
+  duration: number;
+  minimumThroughput?: number;
 };
 
 /**
@@ -22,8 +24,8 @@ export type CircuitBreakerOptions = {
 export type RetryOptions = {
   maxAttempts: number;
   backoff: {
-    initialDelay: number;  // ミリ秒
-    maxDelay: number;      // ミリ秒
+    initialDelay: number;
+    maxDelay: number;
   };
 };
 
@@ -40,7 +42,6 @@ type EndpointInternalConfig = {
 
 /**
  * エンドポイントの設定一覧
- * ドメインレイヤーからは参照されない、インフラレイヤーの内部設定
  */
 const endpointConfigs = {
   user: {
@@ -65,7 +66,7 @@ const endpointConfigs = {
       createUser: {
         path: '/users',
         timeout: 10000,
-        retry: {  // 作成処理は慎重にリトライ
+        retry: {
           maxAttempts: 2,
           backoff: {
             initialDelay: 2000,
@@ -83,7 +84,7 @@ const endpointConfigs = {
       duration: 60000,
     },
     retry: {
-      maxAttempts: 2,  // 試験関連は少なめのリトライ
+      maxAttempts: 2,
       backoff: {
         initialDelay: 1500,
         maxDelay: 4000
@@ -100,7 +101,7 @@ const endpointConfigs = {
       submitExam: {
         path: '/exams/:id/submit',
         timeout: 15000,
-        retry: {  // 提出は特に慎重に
+        retry: {
           maxAttempts: 5,
           backoff: {
             initialDelay: 1000,
@@ -110,32 +111,8 @@ const endpointConfigs = {
       },
     },
   },
-  admin: {
-    domain: 'adminApi' as const,
-    defaultTimeout: 15000,
-    circuitBreaker: {
-      threshold: 2,
-      duration: 120000,
-      minimumThroughput: 2
-    },
-    retry: {
-      maxAttempts: 3,
-      backoff: {
-        initialDelay: 2000,
-        maxDelay: 8000
-      }
-    },
-    endpoints: {
-      getAdminStats: {
-        path: '/admin/stats',
-      },
-    },
-  },
 } as const;
 
-/**
- * エンドポイントの設定を平坦化して管理
- */
 export const endpoints = Object.entries(endpointConfigs).reduce((acc, [_, domainConfig]) => {
   const endpoints = Object.entries(domainConfig.endpoints).reduce((endpointAcc, [key, endpoint]) => {
     return {
@@ -152,20 +129,13 @@ export const endpoints = Object.entries(endpointConfigs).reduce((acc, [_, domain
   return { ...acc, ...endpoints };
 }, {}) as Record<string, EndpointInternalConfig>;
 
-export type EndpointKey = keyof typeof endpoints;
-
-/**
- * エンドポイントの完全なURLを取得する
- * ドメインレイヤーから呼び出される関数
- */
 export function getEndpointUrl(
-  endpointKey: EndpointKey,
+  endpointKey: ApiEndpointKey,
   params: Record<string, string> = {}
 ): string {
   const endpoint = endpoints[endpointKey];
-  let resolvedPath: string = endpoint.path;
+  let resolvedPath = endpoint.path;
 
-  // パスパラメータの置換
   Object.entries(params).forEach(([key, value]) => {
     resolvedPath = resolvedPath.replace(`:${key}`, value);
   });
@@ -173,26 +143,14 @@ export function getEndpointUrl(
   return `${domains[endpoint.domain]}${resolvedPath}`;
 }
 
-/**
- * エンドポイントのタイムアウト時間を取得する
- * インフラレイヤーの内部関数
- */
-export function getEndpointTimeout(endpointKey: EndpointKey): number {
+export function getEndpointTimeout(endpointKey: ApiEndpointKey): number {
   return endpoints[endpointKey].timeout;
 }
 
-/**
- * サーキットブレーカーの設定を取得する
- * インフラレイヤーの内部関数
- */
-export function getCircuitBreakerConfig(endpointKey: EndpointKey): CircuitBreakerOptions {
+export function getCircuitBreakerConfig(endpointKey: ApiEndpointKey): CircuitBreakerOptions {
   return endpoints[endpointKey].circuitBreaker;
 }
 
-/**
- * リトライの設定を取得する
- * インフラレイヤーの内部関数
- */
-export function getRetryConfig(endpointKey: EndpointKey): RetryOptions {
+export function getRetryConfig(endpointKey: ApiEndpointKey): RetryOptions {
   return endpoints[endpointKey].retry;
 } 
