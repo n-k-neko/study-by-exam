@@ -1,13 +1,12 @@
 'use client';
 
-import { useFormState } from 'react-dom';
-import { useFormStatus } from 'react-dom';
+import { useFormState, useFormStatus } from 'react-dom';
 import { login } from '@/lib/bff/server-actions/userActions';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { loginSchema } from '@/lib/shared/validation/auth';
+import { loginSchema, type LoginCredentials } from '@/lib/shared/validation/auth';
 import { useMemo } from 'react';
-import type { z } from 'zod';
+import { startTransition } from 'react';
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -22,7 +21,10 @@ function SubmitButton() {
   );
 }
 
-type FormData = z.infer<typeof loginSchema>;
+// メモ化されたエラーメッセージコンポーネント
+const ErrorMessage = ({ error }: { error: { message?: string } }) => (
+  <p className="mt-2 text-base text-red-500 font-medium">{error.message}</p>
+);
 
 export function LoginForm() {
   const [serverState, formAction] = useFormState(login, null);
@@ -31,29 +33,23 @@ export function LoginForm() {
     register,
     handleSubmit,
     formState: { errors }
-  } = useForm<FormData>({
+  } = useForm<LoginCredentials>({
     resolver: zodResolver(loginSchema),
     mode: 'onBlur'
   });
 
-  // Server ActionsとReact Hook Formを橋渡しする関数
-  const onSubmit = async (data: FormData) => {
+  const onSubmit = handleSubmit((data: LoginCredentials) => {
     const formData = new FormData();
     Object.entries(data).forEach(([key, value]) => {
       formData.append(key, value);
     });
-    await formAction(formData);
-  };
-
-  // メモ化されたエラーメッセージコンポーネント
-  const ErrorMessage = useMemo(() => {
-    return ({ error }: { error: { message?: string } }) => (
-      <p className="mt-2 text-base text-red-500 font-medium">{error.message}</p>
-    );
-  }, []);
+    startTransition(() => {
+      formAction(formData);
+    });
+  });
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
+    <form onSubmit={onSubmit}>
       <div>
         <label htmlFor="loginId" className="block text-xl font-bold text-blue-900">
           ユーザーIDまたはメールアドレス
@@ -80,7 +76,7 @@ export function LoginForm() {
         </div>
       </div>
 
-      <div className="mt-6">
+      <div>
         <label htmlFor="password" className="block text-xl font-bold text-blue-900">
           パスワード
         </label>

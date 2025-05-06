@@ -14,8 +14,5 @@
  * 5. このエンドポイントが呼び出され、authOptionsのauthorizeコールバックが実行
  * 6. JWTの生成と保存
  */
-import NextAuth from 'next-auth';
-import { authOptions } from '@/lib/bff/auth/config';
-
-const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST }; 
+import { handlers } from "@/lib/bff/auth/auth";
+export const { GET, POST } = handlers; 

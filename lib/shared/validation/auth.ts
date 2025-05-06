@@ -24,5 +24,5 @@ export const registerSchema = z.object({
   path: ['confirmPassword'],
 });
 
-export type LoginFormData = z.infer<typeof loginSchema>;
-export type RegisterFormData = z.infer<typeof registerSchema>; 
+export type LoginCredentials = z.infer<typeof loginSchema>;
+export type RegisterCredentials = z.infer<typeof registerSchema>; 

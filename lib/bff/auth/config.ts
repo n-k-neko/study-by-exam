@@ -1,8 +1,30 @@
-import { type NextAuthOptions } from 'next-auth';
+import NextAuth, { type AuthOptions } from 'next-auth';
+import type { JWT } from 'next-auth/jwt';
+import type { Session, DefaultSession } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import type { AuthResponse } from '@/lib/shared/types/auth';
 
-export const authOptions: NextAuthOptions = {
+type CustomUser = {
+  id: string;
+  role: string;
+};
+
+declare module 'next-auth' {
+  interface User extends CustomUser {}
+
+  interface Session {
+    user: CustomUser & DefaultSession['user']
+  }
+}
+
+declare module 'next-auth/jwt' {
+  interface JWT {
+    userId: string;
+    role: string;
+  }
+}
+
+export const config: AuthOptions = {
   providers: [
     CredentialsProvider({
       name: 'Credentials',
@@ -12,24 +34,28 @@ export const authOptions: NextAuthOptions = {
         user: { label: "User", type: "text" }
       },
       async authorize(credentials) {
+        console.log('authorize credentials:', credentials);
         if (!credentials?.user) {
+          console.log('No user data in credentials');
           return null;
         }
 
         try {
           const user = JSON.parse(credentials.user) as AuthResponse;
+          console.log('Parsed user data:', user);
           return {
             id: user.id,
             role: user.role
           };
         } catch (error) {
+          console.error('Error parsing user data:', error);
           return null;
         }
       }
     })
   ],
   session: {
-    strategy: 'jwt',
+    strategy: 'jwt' as const,
     maxAge: 7 * 24 * 60 * 60, // 7日間
   },
   pages: {
@@ -39,18 +65,21 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.userId = user.id;
-        token.role = user.role;
+      if (user && typeof user === 'object' && 'id' in user && 'role' in user) {
+        const typedUser = user as CustomUser;
+        token.userId = typedUser.id;
+        token.role = typedUser.role;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.userId as string;
-        session.user.role = token.role as string;
+        session.user.id = token.userId;
+        session.user.role = token.role;
       }
       return session;
     }
   }
-}; 
+};
+
+export const { handlers, auth, signIn, signOut } = NextAuth(config); 

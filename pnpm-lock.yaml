@@ -27,8 +27,8 @@ importers:
         specifier: 15.3.1
         version: 15.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       next-auth:
-        specifier: ^4.24.11
-        version: 4.24.11(next@15.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        specifier: 5.0.0-beta.27
+        version: 5.0.0-beta.27(next@15.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)
       react:
         specifier: ^19.0.0
         version: 19.1.0
@@ -78,6 +78,20 @@ packages:
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
+
+  '@auth/core@0.39.0':
+    resolution: {integrity: sha512-jusviw/sUSfAh6S/wjY5tRmJOq0Itd3ImF+c/b4HB9DfmfChtcfVJTNJeqCeExeCG8oh4PBKRsMQJsn2W6NhFQ==}
+    peerDependencies:
+      '@simplewebauthn/browser': ^9.0.1
+      '@simplewebauthn/server': ^9.0.2
+      nodemailer: ^6.8.0
+    peerDependenciesMeta:
+      '@simplewebauthn/browser':
+        optional: true
+      '@simplewebauthn/server':
+        optional: true
+      nodemailer:
+        optional: true
 
   '@babel/runtime@7.27.1':
     resolution: {integrity: sha512-1x3D2xEk2fRo3PAhwQwu5UubzgiVWSXTBfWpVd2Mx2AzRqJuDJCsgaDVZ7HB5iGzDW1Hl1sWN2mFyKjmR9uAog==}
@@ -1463,6 +1477,9 @@ packages:
   jose@4.15.9:
     resolution: {integrity: sha512-1vUQX+IdDMVPj4k8kOxgUqlcK518yluMuGZwqlr44FS1ppZB/5GWh4rZG89erpOBOJjU/OBsnCVFfapsRz6nEA==}
 
+  jose@6.0.11:
+    resolution: {integrity: sha512-QxG7EaliDARm1O1S8BGakqncGT9s25bKL1WSf6/oa17Tkqwi8D2ZNglqCF+DsYF88/rV66Q/Q2mFAy697E1DUg==}
+
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
@@ -1674,6 +1691,22 @@ packages:
       nodemailer:
         optional: true
 
+  next-auth@5.0.0-beta.27:
+    resolution: {integrity: sha512-/QtP9C0C99YpEuBEJqMaDXH3ISWMgObQalwVZEoC7sskaIPhv5fQl6fXS/rXJQKqLY6MNJ42rqjqmRdoXZH2EQ==}
+    peerDependencies:
+      '@simplewebauthn/browser': ^9.0.1
+      '@simplewebauthn/server': ^9.0.2
+      next: ^14.0.0-0 || ^15.0.0-0
+      nodemailer: ^6.6.5
+      react: ^18.2.0 || ^19.0.0-0
+    peerDependenciesMeta:
+      '@simplewebauthn/browser':
+        optional: true
+      '@simplewebauthn/server':
+        optional: true
+      nodemailer:
+        optional: true
+
   next@15.3.1:
     resolution: {integrity: sha512-8+dDV0xNLOgHlyBxP1GwHGVaNXsmp+2NhZEYrXr24GWLHtt27YrBPbPuHvzlhi7kZNYjeJNR93IF5zfFu5UL0g==}
     engines: {node: ^18.18.0 || ^19.8.0 || >= 20.0.0}
@@ -1694,6 +1727,9 @@ packages:
         optional: true
       sass:
         optional: true
+
+  oauth4webapi@3.5.0:
+    resolution: {integrity: sha512-DF3mLWNuxPkxJkHmWxbSFz4aE5CjWOsm465VBfBdWzmzX4Mg3vF8icxK+iKqfdWrIumBJ2TaoNQWx+SQc2bsPQ==}
 
   oauth@0.9.15:
     resolution: {integrity: sha512-a5ERWK1kh38ExDEfoO6qUHJb32rd7aYmPHuyCu3Fta/cnICvYmgd2uhuKXvPD+PXB+gCEYYEaQdIRAjCOwAKNA==}
@@ -1824,6 +1860,14 @@ packages:
     resolution: {integrity: sha512-JyhErpYOvBV1hEPwIxc/fHWXPfnEGdRKxc8gFdAZ7XV4tlzyzG847XAyEZqoDnynP88akM4eaHcSOzNcLWFguw==}
     peerDependencies:
       preact: '>=10'
+
+  preact-render-to-string@6.5.11:
+    resolution: {integrity: sha512-ubnauqoGczeGISiOh6RjX0/cdaF8v/oDXIjO85XALCQjwQP+SB4RDXXtvZ6yTYSjG+PC1QRP2AhPgCEsM2EvUw==}
+    peerDependencies:
+      preact: '>=10'
+
+  preact@10.24.3:
+    resolution: {integrity: sha512-Z2dPnBnMUfyQfSQ+GBdsGa16hz35YmLmtTLhM169uW944hYL6xzTYkJjC07j+Wosz733pMWx0fgON3JNw1jJQA==}
 
   preact@10.26.5:
     resolution: {integrity: sha512-fmpDkgfGU6JYux9teDWLhj9mKN55tyepwYbxHgQuIxbWQzgFg5vk7Mrrtfx7xRxq798ynkY4DDDxZr235Kk+4w==}
@@ -2280,6 +2324,14 @@ packages:
 snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
+
+  '@auth/core@0.39.0':
+    dependencies:
+      '@panva/hkdf': 1.2.1
+      jose: 6.0.11
+      oauth4webapi: 3.5.0
+      preact: 10.24.3
+      preact-render-to-string: 6.5.11(preact@10.24.3)
 
   '@babel/runtime@7.27.1': {}
 
@@ -3804,6 +3856,8 @@ snapshots:
 
   jose@4.15.9: {}
 
+  jose@6.0.11: {}
+
   js-tokens@4.0.0: {}
 
   js-yaml@4.1.0:
@@ -3988,6 +4042,12 @@ snapshots:
       react-dom: 19.1.0(react@19.1.0)
       uuid: 8.3.2
 
+  next-auth@5.0.0-beta.27(next@15.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0):
+    dependencies:
+      '@auth/core': 0.39.0
+      next: 15.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      react: 19.1.0
+
   next@15.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
     dependencies:
       '@next/env': 15.3.1
@@ -4012,6 +4072,8 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
       - babel-plugin-macros
+
+  oauth4webapi@3.5.0: {}
 
   oauth@0.9.15: {}
 
@@ -4143,6 +4205,12 @@ snapshots:
     dependencies:
       preact: 10.26.5
       pretty-format: 3.8.0
+
+  preact-render-to-string@6.5.11(preact@10.24.3):
+    dependencies:
+      preact: 10.24.3
+
+  preact@10.24.3: {}
 
   preact@10.26.5: {}
 

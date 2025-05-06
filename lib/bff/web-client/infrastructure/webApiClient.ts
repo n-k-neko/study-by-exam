@@ -58,15 +58,15 @@ export class WebApiClient implements IApiClient {
     return new Proxy({} as T, {
       get: (_, key: string) => ({
         get: <R>(params?: CommonParams, options?: CommonOptions) =>
-          this.request<R>(`${domain}.${key}`, 'GET', params, undefined, options),
+          this.request<R>(key, 'GET', params, undefined, options),
         post: <R>(data: unknown, params?: CommonParams, options?: CommonOptions) =>
-          this.request<R>(`${domain}.${key}`, 'POST', params, data, options),
+          this.request<R>(key, 'POST', params, data, options),
         put: <R>(data: unknown, params?: CommonParams, options?: CommonOptions) =>
-          this.request<R>(`${domain}.${key}`, 'PUT', params, data, options),
+          this.request<R>(key, 'PUT', params, data, options),
         delete: <R>(params?: CommonParams, options?: CommonOptions) =>
-          this.request<R>(`${domain}.${key}`, 'DELETE', params, undefined, options),
+          this.request<R>(key, 'DELETE', params, undefined, options),
         patch: <R>(data: unknown, params?: CommonParams, options?: CommonOptions) =>
-          this.request<R>(`${domain}.${key}`, 'PATCH', params, data, options),
+          this.request<R>(key, 'PATCH', params, data, options),
       })
     });
   }
@@ -80,7 +80,7 @@ export class WebApiClient implements IApiClient {
   ): Promise<R> {
     const policy = createPolicies(endpointKey);
     const url = getEndpointUrl(endpointKey, params);
-    
+
     const mergedOptions = {
       ...baseConfig,
       ...options,
@@ -95,22 +95,18 @@ export class WebApiClient implements IApiClient {
     try {
       const response = await policy(async () => {
         const res = await fetch(url, mergedOptions);
+        const responseData = await res.json();
         if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
           throw new Error(JSON.stringify({
             status: res.status,
             statusText: res.statusText,
-            data: errorData,
+            data: responseData,
           }));
         }
-        return res;
+        return responseData;
       });
 
-      if (response.status === 204) {
-        return {} as R;
-      }
-
-      return response.json();
+      return response;
     } catch (error) {
       if (error instanceof BrokenCircuitError) {
         throw new Error(`Circuit breaker is open for endpoint: ${endpointKey}`);
