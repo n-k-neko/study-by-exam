@@ -57,20 +57,16 @@ const authConfig = {
   callbacks: {
     async jwt({ token, user }: { token: JWT, user: any }) {
       if (user) {
-        console.log('JWT callback - user:', user);
         token.userId = user.id;
         token.role = user.role;
       }
-      console.log('JWT callback - token:', token);
       return token;
     },
     async session({ session, token }: { session: Session, token: JWT }) {
-      console.log('Session callback - token:', token);
       if (session.user) {
         session.user.id = token.userId as string;
         session.user.role = token.role as string;
       }
-      console.log('Session callback - session:', session);
       return session;
     },
     async redirect({ url, baseUrl }: { url: string, baseUrl: string }) {
