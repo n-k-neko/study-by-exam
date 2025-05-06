@@ -1,34 +1,29 @@
+/**
+ * NextAuth.jsの設定を管理するファイル
+ * 
+ * 主な責務：
+ * - 認証プロバイダーの設定（Credentials認証）
+ * - セッション設定（JWT戦略、有効期限）
+ * - コールバック関数の定義（JWT生成、セッション管理）
+ * - 認証関連ページのパス設定
+ * - 環境変数のバリデーション
+ * 
+ * このファイルは設定のみを扱い、実際の認証機能は auth.ts でエクスポートされる
+ */
+
 import NextAuth, { type AuthOptions } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
 import type { Session, DefaultSession } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import type { AuthResponse } from '@/lib/shared/types/auth';
-
-type CustomUser = {
-  id: string;
-  role: string;
-};
-
-declare module 'next-auth' {
-  interface User extends CustomUser {}
-
-  interface Session {
-    user: CustomUser & DefaultSession['user']
-  }
-}
-
-declare module 'next-auth/jwt' {
-  interface JWT {
-    userId: string;
-    role: string;
-  }
-}
+import type { AuthenticatedUserBase } from './types';
 
 if (!process.env.AUTH_SECRET) {
   throw new Error('AUTH_SECRET environment variable is not set');
 }
 
-export const config = {
+// NextAuth.jsの設定オブジェクト
+export const authConfig: AuthOptions = {
   providers: [
     CredentialsProvider({
       name: 'Credentials',
@@ -67,7 +62,7 @@ export const config = {
     // 認証時のユーザー情報をJWTに追加する
     async jwt({ token, user }: { token: JWT, user: any }) {
       if (user && typeof user === 'object' && 'id' in user && 'role' in user) {
-        const typedUser = user as CustomUser;
+        const typedUser = user as AuthenticatedUserBase;
         token.userId = typedUser.id;
         token.role = typedUser.role;
       }
@@ -93,4 +88,6 @@ export const config = {
   secret: process.env.AUTH_SECRET
 } as unknown as AuthOptions;
 
-export const { handlers, auth, signIn, signOut } = NextAuth(config as AuthOptions); 
+// NextAuth.jsの設定をエクスポート
+// 実際の認証機能（handlers, auth, signIn, signOut）は auth.ts でエクスポート
+export const config = authConfig; 
