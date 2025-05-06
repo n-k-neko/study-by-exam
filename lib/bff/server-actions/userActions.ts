@@ -37,8 +37,6 @@ export async function login(
 
     // NextAuth.jsでの認証
     const signInResult = await signIn('credentials', {
-      loginId: formData.loginId,
-      password: formData.password,
       user: JSON.stringify(user),
       redirect: false,
       callbackUrl: '/home'
@@ -92,8 +90,6 @@ export async function register(
 
     // NextAuth.jsでの認証
     const signInResult = await signIn('credentials', {
-      loginId: formData.loginId,
-      password: formData.password,
       user: JSON.stringify(user),
       redirect: false,
       callbackUrl: '/home'

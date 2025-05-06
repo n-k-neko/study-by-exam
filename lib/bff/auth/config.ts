@@ -32,9 +32,8 @@ export const config = {
   providers: [
     CredentialsProvider({
       name: 'Credentials',
+      // バックエンドAPIで認証済みのユーザー情報のみを受け取る
       credentials: {
-        loginId: { label: "Login ID", type: "text" },
-        password: { label: "Password", type: "password" },
         user: { label: "User", type: "text" }
       },
       async authorize(credentials) {
@@ -79,7 +78,13 @@ export const config = {
       return session;
     }
   },
+  // 開発環境でのみデバッグログを有効にする
+  // true: 認証フローの詳細なログを出力
+  // false: 最小限のログのみ出力
   debug: process.env.NODE_ENV === 'development',
+  // JWTの署名と暗号化に使用する秘密鍵
+  // 環境変数AUTH_SECRETから取得
+  // 注意: 本番環境では32文字以上のランダムな文字列を使用すること
   secret: process.env.AUTH_SECRET
 } as unknown as AuthOptions;
 
