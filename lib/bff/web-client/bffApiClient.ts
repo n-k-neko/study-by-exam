@@ -1,11 +1,9 @@
-import { ApiEndpointKey, CommonParams, CommonOptions, HttpMethods, IApiClient } from './types';
+import { ApiEndpointKey, CommonParams, CommonOptions, HttpMethods, IApiClient, ApiEndpoints } from './types';
 
 /**
  * APIクライアントを生成する型
  */
-export type ApiClient = {
-  [E in ApiEndpointKey]: HttpMethods<unknown>;
-};
+export type ApiClient = ApiEndpoints;
 
 /**
  * BFF層のAPIクライアントを生成する

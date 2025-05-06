@@ -1,6 +1,6 @@
 import { retry, handleAll, ExponentialBackoff, timeout, TimeoutStrategy, ConsecutiveBreaker, circuitBreaker, BrokenCircuitError } from 'cockatiel';
 import { getEndpointUrl, getEndpointTimeout, getCircuitBreakerConfig, getRetryConfig } from '../endpoints';
-import { IApiClient, CommonParams, CommonOptions, ApiEndpointKey } from '../types';
+import { IApiClient, CommonParams, CommonOptions, ApiEndpointKey, ApiEndpoints } from '../types';
 
 /**
  * BFFからWebAPIアプリケーションへのリクエストのベース設定
@@ -51,6 +51,26 @@ const createPolicies = (endpointKey: ApiEndpointKey) => {
  * WebAPIアプリケーションへのリクエストを行うクライアント
  */
 export class WebApiClient implements IApiClient {
+  user = this.createEndpointProxy<ApiEndpoints['user']>('user');
+  exam = this.createEndpointProxy<ApiEndpoints['exam']>('exam');
+
+  private createEndpointProxy<T extends Record<string, unknown>>(domain: string): T {
+    return new Proxy({} as T, {
+      get: (_, key: string) => ({
+        get: <R>(params?: CommonParams, options?: CommonOptions) =>
+          this.request<R>(`${domain}.${key}`, 'GET', params, undefined, options),
+        post: <R>(data: unknown, params?: CommonParams, options?: CommonOptions) =>
+          this.request<R>(`${domain}.${key}`, 'POST', params, data, options),
+        put: <R>(data: unknown, params?: CommonParams, options?: CommonOptions) =>
+          this.request<R>(`${domain}.${key}`, 'PUT', params, data, options),
+        delete: <R>(params?: CommonParams, options?: CommonOptions) =>
+          this.request<R>(`${domain}.${key}`, 'DELETE', params, undefined, options),
+        patch: <R>(data: unknown, params?: CommonParams, options?: CommonOptions) =>
+          this.request<R>(`${domain}.${key}`, 'PATCH', params, data, options),
+      })
+    });
+  }
+
   async request<R>(
     endpointKey: ApiEndpointKey,
     method: string,

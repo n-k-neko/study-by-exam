@@ -1,17 +1,27 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { loginSchema, type LoginFormData, registerSchema, type RegisterFormData } from '@/lib/shared/validation/auth';
+import { signIn, signOut } from 'next-auth/react';
+import { loginSchema, registerSchema } from '@/lib/shared/validation/auth';
+import type { LoginCredentials, RegisterCredentials } from '@/lib/shared/types/auth';
+import { UserClient } from '../web-client/user';
 
-export async function login(prevState: { error?: string; errors?: Record<string, { message: string }> } | null, data: FormData) {
-  const formData = {
+interface ActionState {
+  error?: string;
+  errors?: Record<string, { message: string }>;
+}
+
+export async function login(
+  prevState: ActionState | null,
+  data: FormData
+): Promise<ActionState> {
+  const formData: LoginCredentials = {
     loginId: data.get('loginId') as string,
     password: data.get('password') as string,
   };
   
   const validated = loginSchema.safeParse(formData);
   if (!validated.success) {
-    // エラーメッセージをフィールドごとにマッピング
     const errors = validated.error.errors.reduce((acc, err) => {
       const field = err.path[0] as string;
       acc[field] = { message: err.message };
@@ -22,17 +32,32 @@ export async function login(prevState: { error?: string; errors?: Record<string,
   }
 
   try {
-    // TODO: 実際のログイン処理を実装
-    // 成功時はリダイレクト
+    // バックエンドAPIで認証
+    const user = await UserClient.login(formData);
+
+    // 認証成功後、NextAuthでJWTを作成
+    const result = await signIn('credentials', {
+      ...formData,
+      user: JSON.stringify(user), // NextAuthのauthorizeコールバックに渡すためにユーザー情報を含める
+      redirect: false
+    });
+
+    if (result?.error) {
+      return { error: 'セッションの作成に失敗しました' };
+    }
+
     redirect('/home');
   } catch (error) {
     return { error: '認証に失敗しました' };
   }
 }
 
-export async function register(prevState: { error?: string; errors?: Record<string, { message: string }> } | null, data: FormData) {
-  const formData = {
-    userId: data.get('userId') as string,
+export async function register(
+  prevState: ActionState | null,
+  data: FormData
+): Promise<ActionState> {
+  const formData: RegisterCredentials = {
+    loginId: data.get('userId') as string,
     email: data.get('email') as string,
     password: data.get('password') as string,
     confirmPassword: data.get('confirmPassword') as string,
@@ -40,7 +65,6 @@ export async function register(prevState: { error?: string; errors?: Record<stri
 
   const validated = registerSchema.safeParse(formData);
   if (!validated.success) {
-    // エラーメッセージをフィールドごとにマッピング
     const errors = validated.error.errors.reduce((acc, err) => {
       const field = err.path[0] as string;
       acc[field] = { message: err.message };
@@ -51,10 +75,33 @@ export async function register(prevState: { error?: string; errors?: Record<stri
   }
 
   try {
-    // TODO: 実際の登録処理を実装
-    // 成功時はリダイレクト
+    // ユーザー登録APIの呼び出し
+    const user = await UserClient.register(formData);
+
+    // 登録成功後、NextAuthでJWTを作成
+    const signInResult = await signIn('credentials', {
+      loginId: formData.loginId,
+      password: formData.password,
+      user: JSON.stringify(user),
+      redirect: false
+    });
+
+    if (signInResult?.error) {
+      return { error: 'セッションの作成に失敗しました' };
+    }
+
+    redirect('/home');
+  } catch (error) {
+    return { error: 'ユーザー登録に失敗しました' };
+  }
+}
+
+export async function logout(): Promise<ActionState> {
+  try {
+    await signOut({ redirect: false });
     redirect('/login');
   } catch (error) {
-    return { error: '登録に失敗しました' };
+    return { error: 'ログアウトに失敗しました' };
   }
+  return {};
 } 

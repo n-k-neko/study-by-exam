@@ -1,3 +1,6 @@
+import type { UserProfile } from './user';
+import type { AuthResponse } from '@/lib/shared/types/auth';
+
 /**
  * APIエンドポイントのキー型
  */
@@ -25,9 +28,26 @@ export type HttpMethods<R> = {
 };
 
 /**
+ * APIエンドポイントの定義
+ */
+export type ApiEndpoints = {
+  user: {
+    login: HttpMethods<AuthResponse>;
+    register: HttpMethods<AuthResponse>;
+    getCurrentUserProfile: HttpMethods<UserProfile>;
+    updateUserProfile: HttpMethods<UserProfile>;
+  };
+  exam: {
+    getExams: HttpMethods<unknown>;
+    getExamById: HttpMethods<unknown>;
+    submitExam: HttpMethods<unknown>;
+  };
+};
+
+/**
  * APIクライアントのインターフェース
  */
-export interface IApiClient {
+export interface IApiClient extends ApiEndpoints {
   request<R>(
     endpointKey: ApiEndpointKey,
     method: string,

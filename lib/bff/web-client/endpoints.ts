@@ -60,19 +60,19 @@ const endpointConfigs = {
       }
     },
     endpoints: {
-      getUser: {
-        path: '/users/:id',
-      },
-      createUser: {
-        path: '/users',
+      login: {
+        path: '/auth/login',
         timeout: 10000,
-        retry: {
-          maxAttempts: 2,
-          backoff: {
-            initialDelay: 2000,
-            maxDelay: 8000
-          }
-        }
+      },
+      register: {
+        path: '/auth/register',
+        timeout: 10000,
+      },
+      logout: {
+        path: '/auth/logout',
+      },
+      me: {
+        path: '/users/me',
       },
     },
   },
