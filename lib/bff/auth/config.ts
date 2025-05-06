@@ -34,21 +34,17 @@ export const config: AuthOptions = {
         user: { label: "User", type: "text" }
       },
       async authorize(credentials) {
-        console.log('authorize credentials:', credentials);
         if (!credentials?.user) {
-          console.log('No user data in credentials');
           return null;
         }
 
         try {
           const user = JSON.parse(credentials.user) as AuthResponse;
-          console.log('Parsed user data:', user);
           return {
             id: user.id,
             role: user.role
           };
         } catch (error) {
-          console.error('Error parsing user data:', error);
           return null;
         }
       }

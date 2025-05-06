@@ -15,12 +15,10 @@ export async function login(
   prevState: ActionState | null,
   data: FormData
 ): Promise<ActionState> {
-  console.log('login function called');
   const formData: LoginCredentials = {
     loginId: data.get('loginId') as string,
     password: data.get('password') as string,
   };
-  console.log('formData:', formData);
   
   const validated = loginSchema.safeParse(formData);
   if (!validated.success) {
@@ -34,10 +32,8 @@ export async function login(
   }
 
   try {
-    console.log('Attempting to login with UserClient');
     // バックエンドAPIで認証
     const user = await UserClient.login(formData);
-    console.log('UserClient.login response:', user);
 
     // NextAuth.jsでの認証
     const signInResult = await signIn('credentials', {
@@ -47,19 +43,14 @@ export async function login(
       redirect: false,
       callbackUrl: '/home'
     });
-    console.log('signIn result:', signInResult);
 
     if (signInResult?.error) {
-      console.error('SignIn error:', signInResult.error);
       return { error: 'サインインに失敗しました' };
     }
 
     // セッションの確認
     const session = await auth();
-    console.log('Current session:', session);
-
     if (!session?.user) {
-      console.error('No session after signIn');
       return { error: 'セッションの作成に失敗しました' };
     }
 
@@ -74,7 +65,6 @@ export async function login(
     if (error?.digest?.startsWith('NEXT_REDIRECT')) {
       throw error;
     }
-    console.error('Login error:', error);
     return { error: '認証に失敗しました' };
   }
 }
