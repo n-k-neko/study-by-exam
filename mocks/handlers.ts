@@ -1,38 +1,57 @@
 import { http, HttpResponse } from 'msw';
-import { mockUser } from './user';
+import { domains } from '@/lib/bff/web-client/endpoints';
+
+// リクエストの型定義
+interface LoginRequest {
+  loginId: string;
+  password: string;
+}
+
+// モック用のユーザーデータ
+const mockUsers = [
+  {
+    loginId: 'abc',
+    password: 'password123',
+    role: 'USER'
+  }
+];
 
 export const handlers = [
-  // ユーザー認証関連
-  http.post('/api/auth/login', () => {
-    return HttpResponse.json({ token: 'mock-token' });
-  }),
+  // ログインAPI
+  http.post(`${domains.userApi}/auth/login`, async ({ request }) => {
+    const body = await request.json() as LoginRequest;
+    const { loginId, password } = body;
 
-  http.post('/api/auth/register', () => {
-    return new HttpResponse(null, { status: 201 });
-  }),
+    // ユーザー認証
+    const user = mockUsers.find(u => u.loginId === loginId && u.password === password);
 
-  http.post('/api/auth/password-reset', () => {
-    return new HttpResponse(null, { status: 200 });
-  }),
+    if (!user) {
+      return new HttpResponse(
+        JSON.stringify({ message: 'Invalid credentials' }),
+        { status: 401 }
+      );
+    }
 
-  http.post('/api/auth/password-reset/confirm', () => {
-    return new HttpResponse(null, { status: 200 });
-  }),
-
-  // ユーザー情報関連
-  http.get('/api/auth/status', () => {
-    return HttpResponse.json({ isAuthenticated: true });
-  }),
-
-  http.get('/api/users/profile', () => {
-    return HttpResponse.json(mockUser);
-  }),
-
-  http.get('/api/users/learning-progress', () => {
+    // 認証成功時のレスポンス
     return HttpResponse.json({
-      totalQuestions: 100,
-      answeredQuestions: 50,
-      correctAnswers: 35,
+      id: user.loginId,
+      role: user.role
     });
   }),
+
+  // ユーザー情報取得API
+  http.get(`${domains.userApi}/users/me`, () => {
+    // 認証済みユーザーの詳細情報を返却
+    return HttpResponse.json({
+      id: '1',
+      loginId: 'test@example.com',
+      name: 'テストユーザー',
+      email: 'test@example.com',
+      role: 'USER',
+      preferences: {
+        theme: 'light',
+        notifications: true
+      }
+    });
+  })
 ]; 

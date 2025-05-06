@@ -14,12 +14,6 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-    import('../mocks/browser').then(({ worker }) => {
-      worker.start();
-    });
-  }
-
   return (
     <html lang="ja">
       <body className={`${inter.className} bg-gray-100`}>{children}</body>
