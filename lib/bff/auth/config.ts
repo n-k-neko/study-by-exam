@@ -51,7 +51,7 @@ export const config: AuthOptions = {
     })
   ],
   session: {
-    strategy: 'jwt' as const,
+    strategy: 'jwt',
     maxAge: 7 * 24 * 60 * 60, // 7日間
   },
   pages: {
@@ -70,8 +70,8 @@ export const config: AuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.userId;
-        session.user.role = token.role;
+        session.user.id = token.userId as string;
+        session.user.role = token.role as string;
       }
       return session;
     }

@@ -54,12 +54,7 @@ export async function login(
       return { error: 'セッションの作成に失敗しました' };
     }
 
-    // 認証成功後のリダイレクト
-    if (signInResult?.url) {
-      redirect(signInResult.url);
-    } else {
-      redirect('/home');
-    }
+    redirect('/home');
   } catch (error: any) {
     // NEXT_REDIRECTエラーは無視（正常な動作）
     if (error?.digest?.startsWith('NEXT_REDIRECT')) {
@@ -113,11 +108,7 @@ export async function register(
       return { error: 'セッションの作成に失敗しました' };
     }
 
-    if (signInResult?.url) {
-      redirect(signInResult.url);
-    } else {
-      redirect('/home');
-    }
+    redirect('/home');
   } catch (error: any) {
     if (error?.digest?.startsWith('NEXT_REDIRECT')) {
       throw error;
