@@ -137,6 +137,340 @@ export function Form() {
 2. フォームの状態に応じたUI更新（ボタンの無効化、ローディング表示など）を適切に実装
 3. エラーハンドリングとユーザーフィードバックを考慮した設計
 
+## Next-Auth による認証実装
+
+### 1. 基本設定
+
+Next-Authの設定は`lib/bff/auth/config.ts`で一元管理されています：
+
+```typescript
+import { type NextAuthOptions } from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
+
+export const authOptions: NextAuthOptions = {
+  providers: [
+    CredentialsProvider({
+      // 認証プロバイダーの設定
+      credentials: {
+        loginId: { label: "Login ID", type: "text" },
+        password: { label: "Password", type: "password" },
+        user: { label: "User", type: "text" }
+      },
+      async authorize(credentials) {
+        if (!credentials?.user) return null;
+        
+        try {
+          const user = JSON.parse(credentials.user) as AuthResponse;
+          return {
+            id: user.id,
+            role: user.role
+          };
+        } catch (error) {
+          return null;
+        }
+      }
+    })
+  ],
+  session: {
+    strategy: 'jwt',
+    maxAge: 7 * 24 * 60 * 60, // 7日間
+  },
+  pages: {
+    signIn: '/login',
+    signOut: '/logout',
+    error: '/auth/error',
+  },
+  callbacks: {
+    // JWTの生成時のコールバック
+    async jwt({ token, user }) {
+      if (user) {
+        token.userId = user.id;
+        token.role = user.role;
+      }
+      return token;
+    },
+    // セッション生成時のコールバック
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.userId as string;
+        session.user.role = token.role as string;
+      }
+      return session;
+    }
+  }
+};
+```
+
+### 2. 認証フローの詳細
+
+#### ログインフロー
+
+1. **ユーザー入力**
+```typescript
+interface LoginCredentials {
+  loginId: string;
+  password: string;
+}
+```
+
+2. **Server Action での処理**
+```typescript
+async function login(prevState: any, formData: FormData) {
+  const credentials = {
+    loginId: formData.get('loginId'),
+    password: formData.get('password')
+  };
+
+  // バックエンドAPIでの認証
+  const authResponse = await userClient.login(credentials);
+  
+  // Next-Authでの認証
+  const result = await signIn('credentials', {
+    user: JSON.stringify(authResponse),
+    redirect: false
+  });
+
+  if (!result?.ok) {
+    return { error: 'ログインに失敗しました' };
+  }
+
+  redirect('/dashboard');
+}
+```
+
+3. **JWTの生成と管理**
+- `jwt`コールバックでトークンにユーザー情報を付与
+- `session`コールバックでセッションにユーザー情報を反映
+- JWTには必要最小限の情報（`id`と`role`）のみを含める
+
+### 3. セキュリティ考慮事項
+
+1. **トークン管理**
+- JWTの有効期限を7日間に設定
+- 必要最小限の情報のみをトークンに格納
+- セッションストレージはクライアントサイド（JWT）を使用
+
+2. **認証エラーハンドリング**
+- カスタムエラーページの設定
+- エラーメッセージの適切な表示
+- リダイレクト先の制御
+
+### 4. 型安全性の確保
+
+```typescript
+// 認証レスポンスの型定義
+interface AuthResponse {
+  id: string;
+  role: string;
+}
+
+// セッション型の拡張
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      role: string;
+    } & DefaultSession["user"]
+  }
+}
+```
+
+### 5. ミドルウェアでの認証チェック
+
+```typescript
+export const config = {
+  matcher: [
+    '/dashboard/:path*',
+    '/admin/:path*'
+  ]
+};
+
+export async function middleware(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  
+  if (!session) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // 管理者ページへのアクセス制御
+  if (
+    request.nextUrl.pathname.startsWith('/admin') &&
+    session.user.role !== 'ADMIN'
+  ) {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+
+  return NextResponse.next();
+}
+```
+
+### 6. 認証状態の利用
+
+```typescript
+// サーバーコンポーネントでの使用
+async function DashboardPage() {
+  const session = await getServerSession(authOptions);
+  
+  if (!session) {
+    redirect('/login');
+  }
+  
+  return (
+    <div>
+      <h1>ようこそ、{session.user.id}さん</h1>
+      {/* ... */}
+    </div>
+  );
+}
+
+// クライアントコンポーネントでの使用
+'use client';
+
+function UserMenu() {
+  const { data: session } = useSession();
+  
+  if (!session) {
+    return null;
+  }
+  
+  return (
+    <div>
+      <span>{session.user.id}</span>
+      <button onClick={() => signOut()}>ログアウト</button>
+    </div>
+  );
+}
+```
+
+このように、Next-Authを使用することで、セキュアで型安全な認証システムを実現しています。JWTベースの認証により、ステートレスなセッション管理が可能となり、アプリケーションのスケーラビリティも確保されています。
+
+### 7. JWTとユーザー情報の設計方針
+
+Next-Authの実装において、JWTに含める情報は以下の2つに限定します：
+
+1. **ユーザーID（`id`）**
+   - 不変の識別子
+   - ユーザーを一意に特定するために必要最小限の情報
+
+2. **権限情報（`role`）**
+   - アクセス制御に必要な情報
+   - 認可の判定に使用
+
+```typescript
+// JWTに含める情報の型定義
+interface AuthResponse {
+  id: string;
+  role: string;
+}
+
+// 表示用の詳細な型定義
+interface UserDetails {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+  preferences: UserPreferences;
+  // その他の表示用情報
+}
+```
+
+#### ユーザー情報の取得方法
+
+表示用のユーザー情報は、BFFを介して取得します：
+
+```typescript
+// lib/bff/web-client/user.ts
+export class UserClient {
+  async getCurrentUser(): Promise<UserDetails> {
+    return get<UserDetails>('/api/users/me', {
+      next: {
+        // キャッシュの設定
+        revalidate: 60,  // 1分間キャッシュ
+        tags: ['user-info']  // キャッシュの制御用タグ
+      }
+    });
+  }
+
+  async updateUser(data: UpdateUserDto): Promise<UserDetails> {
+    const result = await put<UserDetails>('/api/users/me', data);
+    // 更新後にキャッシュを再検証
+    revalidateTag('user-info');
+    return result;
+  }
+}
+
+// app/components/UserProfile.tsx
+async function UserProfile() {
+  const session = await getServerSession(authOptions);
+  if (!session) return null;
+
+  const userClient = new UserClient();
+  const userDetails = await userClient.getCurrentUser();
+
+  return (
+    <div>
+      <h1>ようこそ、{userDetails.name}さん</h1>
+      <p>メール: {userDetails.email}</p>
+      {userDetails.avatarUrl && (
+        <img src={userDetails.avatarUrl} alt="プロフィール画像" />
+      )}
+      {/* その他の表示情報 */}
+    </div>
+  );
+}
+```
+
+#### この設計のメリット
+
+1. **セキュリティ**
+   - JWTに含まれる情報を最小限に抑えることで、トークンの盗難リスクを最小化
+   - 変更可能な情報をトークンに含めないことで、古い情報が表示されるリスクを排除
+
+2. **保守性**
+   - ユーザー情報の更新時にJWTの再発行が不要
+   - 表示用の情報はBFFを介して取得するため、表示項目の追加・変更が容易
+
+3. **パフォーマンス**
+   - JWTのサイズを最小限に保つことで、リクエストヘッダーのサイズを抑制
+   - BFFでのキャッシュ制御により、バックエンドへのリクエストを最適化可能
+
+#### キャッシュ戦略
+
+1. **キャッシュの設定**
+   ```typescript
+   // キャッシュ期間の設定
+   const CACHE_TIMES = {
+     userInfo: 60,  // 1分
+     preferences: 300,  // 5分
+     staticData: 3600  // 1時間
+   } as const;
+   ```
+
+2. **キャッシュの再検証**
+   ```typescript
+   // 情報更新時のキャッシュ制御
+   async function updateUserProfile(data: UpdateProfileDto) {
+     await userClient.updateProfile(data);
+     // 関連するキャッシュを再検証
+     revalidateTag('user-info');
+   }
+   ```
+
+3. **エラーハンドリング**
+   ```typescript
+   async function UserProfile() {
+     try {
+       const userDetails = await userClient.getCurrentUser();
+       return <UserProfileView user={userDetails} />;
+     } catch (error) {
+       // エラー時のフォールバックUI
+       return <UserProfileError />;
+     }
+   }
+   ```
+
+このように、JWTには認証に必要な最小限の情報のみを含め、表示用の情報は適切なキャッシュ戦略とともにBFFを介して取得する設計とします。これにより、セキュアでパフォーマンスの高い実装を実現します。
+
 ## バリデーション（Zod）
 
 ### 概要

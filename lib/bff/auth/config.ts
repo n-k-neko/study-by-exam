@@ -20,9 +20,7 @@ export const authOptions: NextAuthOptions = {
           const user = JSON.parse(credentials.user) as AuthResponse;
           return {
             id: user.id,
-            role: user.role,
-            name: user.name,
-            email: user.email
+            role: user.role
           };
         } catch (error) {
           return null;

@@ -1,8 +1,6 @@
 export interface AuthResponse {
   id: string;
   role: string;
-  name?: string;
-  email?: string;
 }
 
 export interface LoginCredentials {
