@@ -2450,3 +2450,182 @@ const user = await api.getUser.get<User>({ id: '123' });
 4. **保守性**
    - 設定変更の影響範囲が明確
    - コードの見通しの良さ
+
+## Middleware による認証制御
+
+### 1. Middlewareの基本
+
+Next.jsのMiddlewareは、リクエストの処理前に実行される特別なコードです。プロジェクトのルートディレクトリに`middleware.ts`を配置することで、自動的に有効になります。
+
+```typescript
+// middleware.ts
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { getToken } from 'next-auth/jwt';
+
+// 認証が不要なパス
+const publicPaths = ['/', '/login', '/register'];
+
+// パスが公開パスかどうかをチェック
+const isPublicPath = (path: string) => {
+  return publicPaths.some(publicPath => 
+    path === publicPath || path === `${publicPath}/`
+  );
+};
+
+export async function middleware(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  // 認証が不要なパスの場合はスキップ
+  if (isPublicPath(path)) {
+    return NextResponse.next();
+  }
+
+  // JWTの取得を試みる
+  const token = await getToken({
+    req: request,
+    secret: process.env.NEXTAUTH_SECRET
+  });
+
+  // 認証が必要なパスで未認証の場合、ログインページにリダイレクト
+  if (!token) {
+    const loginUrl = new URL('/login', request.url);
+    // 現在のパスを?callbackUrl=としてクエリに追加
+    loginUrl.searchParams.set('callbackUrl', path);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return NextResponse.next();
+}
+
+// ミドルウェアを適用するパスを設定
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public (public files)
+     */
+    '/((?!_next/static|_next/image|favicon.ico|public).*)',
+  ],
+};
+```
+
+### 2. エッジランタイムでの実行
+
+Middlewareはエッジランタイム（Edge Runtime）で実行されます。これには以下のような特徴と制限があります：
+
+1. **実行環境の制限**
+   - Node.jsのAPIが使用できない
+   - 利用可能なWeb APIが限定される
+   - ファイルシステムへのアクセス不可
+
+2. **高速な実行**
+   - ユーザーに近いエッジで実行
+   - レイテンシの最小化
+   - CDNとの親和性
+
+3. **軽量な処理**
+   - 単純なルーティング制御
+   - ヘッダーの確認や設定
+   - 基本的な認証チェック
+
+### 3. セキュリティの考慮事項
+
+1. **二重の認証チェック**
+   ```typescript
+   // Middleware（エッジ）での軽量なチェック
+   export async function middleware(request: NextRequest) {
+     const token = await getToken({ req: request });
+     if (!token) return NextResponse.redirect(new URL('/login', request.url));
+     return NextResponse.next();
+   }
+
+   // APIルート（アプリケーションサーバー）での厳密なチェック
+   export async function GET(request: Request) {
+     const session = await getServerSession(authOptions);
+     if (!session) {
+       return new Response('Unauthorized', { status: 401 });
+     }
+     
+     // トークンの有効性を詳細にチェック
+     const isValid = await validateToken(session.user.id);
+     if (!isValid) {
+       return new Response('Invalid token', { status: 401 });
+     }
+
+     // 本来の処理
+     return new Response('Success', { status: 200 });
+   }
+   ```
+
+2. **認証の役割分担**
+   - Middleware: ルーティングレベルの基本的な認証チェック
+   - アプリケーションサーバー: 詳細な認証・認可の検証
+
+3. **セキュリティのベストプラクティス**
+   - JWTの署名検証は必須
+   - センシティブな処理はアプリケーションサーバーで実行
+   - エッジでの処理は最小限に抑える
+
+### 4. パフォーマンスの最適化
+
+1. **静的アセットの除外**
+   ```typescript
+   export const config = {
+     matcher: [
+       // 静的ファイルは除外
+       '/((?!_next/static|_next/image|favicon.ico|public).*)',
+     ],
+   };
+   ```
+
+2. **キャッシュの活用**
+   ```typescript
+   // レスポンスヘッダーの設定
+   const response = NextResponse.next();
+   response.headers.set('Cache-Control', 's-maxage=60');
+   return response;
+   ```
+
+3. **効率的なルーティング**
+   ```typescript
+   // パスパターンの最適化
+   const matcher = [
+     '/dashboard/:path*',
+     '/api/:path*',
+     '/((?!auth|_next|static).*)'
+   ];
+   ```
+
+### 5. 実装のベストプラクティス
+
+1. **明確な責務分担**
+   - Middleware: ルーティング制御、基本的な認証チェック
+   - アプリケーション: ビジネスロジック、詳細な認証・認可
+
+2. **エラーハンドリング**
+   ```typescript
+   export async function middleware(request: NextRequest) {
+     try {
+       const token = await getToken({ req: request });
+       // ... 処理 ...
+     } catch (error) {
+       // エラー時は安全側に倒してログインページへ
+       console.error('Middleware error:', error);
+       return NextResponse.redirect(new URL('/login', request.url));
+     }
+   }
+   ```
+
+3. **環境変数の利用**
+   ```typescript
+   const token = await getToken({
+     req: request,
+     secret: process.env.NEXTAUTH_SECRET
+   });
+   ```
+
+このように、Middlewareはエッジでの高速な認証チェックを提供しますが、その制限を理解し、適切な役割分担を行うことが重要です。セキュリティ上重要な処理は必ずアプリケーションサーバー側で実行し、Middlewareはルーティングレベルの基本的なチェックに留めるべきです。
