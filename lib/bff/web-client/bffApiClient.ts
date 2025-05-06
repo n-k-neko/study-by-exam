@@ -1,5 +1,5 @@
 import { retry, handleAll, ExponentialBackoff, timeout, TimeoutStrategy, ConsecutiveBreaker, circuitBreaker, BrokenCircuitError } from 'cockatiel';
-import { EndpointKey, getEndpointUrl, getEndpointTimeout, getCircuitBreakerConfig } from './endpoints';
+import { EndpointKey, getEndpointUrl, getEndpointTimeout, getCircuitBreakerConfig, getRetryConfig } from './endpoints';
 
 /**
  * BFFからWebAPIアプリケーションへのリクエストのベース設定
@@ -10,23 +10,6 @@ const baseConfig = {
   },
 };
 
-/**
- * APIのベースURL
- * 環境変数が設定されていない場合は開発環境のURLをデフォルトとして使用
- */
-const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:8080';
-
-// デフォルトの設定
-const DEFAULT_CONFIG = {
-  retry: {
-    maxAttempts: 3,
-    backoff: {
-      initialDelay: 1000,  // 初回リトライまでの待機時間（ミリ秒）
-      maxDelay: 5000      // 最大待機時間（ミリ秒）
-    }
-  }
-} as const;
-
 // サーキットブレーカーのマップ（エンドポイントごとに保持）
 const circuitBreakers = new Map<EndpointKey, ReturnType<typeof circuitBreaker>>();
 
@@ -35,11 +18,12 @@ const createPolicies = (endpointKey: EndpointKey) => {
   const timeoutMs = getEndpointTimeout(endpointKey);
   const timeoutPolicy = timeout(timeoutMs, TimeoutStrategy.Aggressive);
   
+  const retryConfig = getRetryConfig(endpointKey);
   const retryPolicy = retry(handleAll, {
-    maxAttempts: DEFAULT_CONFIG.retry.maxAttempts,
+    maxAttempts: retryConfig.maxAttempts,
     backoff: new ExponentialBackoff({
-      initialDelay: DEFAULT_CONFIG.retry.backoff.initialDelay,
-      maxDelay: DEFAULT_CONFIG.retry.backoff.maxDelay,
+      initialDelay: retryConfig.backoff.initialDelay,
+      maxDelay: retryConfig.backoff.maxDelay,
     }),
   });
 
@@ -64,6 +48,7 @@ const createPolicies = (endpointKey: EndpointKey) => {
 
 /**
  * WebAPIアプリケーションへのリクエストを行うクライアント
+ * 基本的な実装を提供し、ApiClientによってラップされる
  */
 export async function bffApiClient<R>(
   endpointKey: EndpointKey,
@@ -107,60 +92,4 @@ export async function bffApiClient<R>(
     }
     throw error;
   }
-}
-
-/**
- * APIクライアントを生成する型
- */
-type ApiClient = {
-  [E in EndpointKey]: {
-    get(params?: Record<string, string>, options?: Omit<RequestInit, 'method'>): Promise<unknown>;
-    post(data: unknown, params?: Record<string, string>, options?: Omit<RequestInit, 'method' | 'body'>): Promise<unknown>;
-    put(data: unknown, params?: Record<string, string>, options?: Omit<RequestInit, 'method' | 'body'>): Promise<unknown>;
-    delete(params?: Record<string, string>, options?: Omit<RequestInit, 'method'>): Promise<unknown>;
-    patch(data: unknown, params?: Record<string, string>, options?: Omit<RequestInit, 'method' | 'body'>): Promise<unknown>;
-  };
-};
-
-/**
- * APIクライアントを生成する
- */
-function createApiClient(): ApiClient {
-  return new Proxy({} as ApiClient, {
-    get(target, endpointKey: EndpointKey) {
-      return {
-        get: <R>(params?: Record<string, string>, options?: Omit<RequestInit, 'method'>) =>
-          bffApiClient<R>(endpointKey, params, { ...options, method: 'GET' }),
-
-        post: <R>(data: unknown, params?: Record<string, string>, options?: Omit<RequestInit, 'method' | 'body'>) =>
-          bffApiClient<R>(endpointKey, params, {
-            ...options,
-            method: 'POST',
-            body: JSON.stringify(data),
-          }),
-
-        put: <R>(data: unknown, params?: Record<string, string>, options?: Omit<RequestInit, 'method' | 'body'>) =>
-          bffApiClient<R>(endpointKey, params, {
-            ...options,
-            method: 'PUT',
-            body: JSON.stringify(data),
-          }),
-
-        delete: <R>(params?: Record<string, string>, options?: Omit<RequestInit, 'method'>) =>
-          bffApiClient<R>(endpointKey, params, { ...options, method: 'DELETE' }),
-
-        patch: <R>(data: unknown, params?: Record<string, string>, options?: Omit<RequestInit, 'method' | 'body'>) =>
-          bffApiClient<R>(endpointKey, params, {
-            ...options,
-            method: 'PATCH',
-            body: JSON.stringify(data),
-          }),
-      };
-    },
-  });
-}
-
-/**
- * APIクライアントのインスタンス
- */
-export const api = createApiClient(); 
+} 

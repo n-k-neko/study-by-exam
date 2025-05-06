@@ -1,4 +1,13 @@
 /**
+ * APIドメインの設定
+ */
+export const domains = {
+  userApi: process.env.USER_API_DOMAIN ?? 'http://localhost:8081',
+  examApi: process.env.EXAM_API_DOMAIN ?? 'http://localhost:8082',
+  adminApi: process.env.ADMIN_API_DOMAIN ?? 'http://localhost:8083',
+} as const;
+
+/**
  * サーキットブレーカーの設定型
  */
 export type CircuitBreakerOptions = {
@@ -8,84 +17,146 @@ export type CircuitBreakerOptions = {
 };
 
 /**
- * エンドポイントの設定型
+ * リトライの設定型
  */
-type EndpointConfig = {
-  domain: string;  // APIドメイン
-  path: string;    // エンドポイントのパス
-  timeout: number; // タイムアウト時間（ミリ秒）
+export type RetryOptions = {
+  maxAttempts: number;
+  backoff: {
+    initialDelay: number;  // ミリ秒
+    maxDelay: number;      // ミリ秒
+  };
 };
 
 /**
- * サーキットブレーカーの設定一覧
+ * エンドポイントの設定型（内部用）
  */
-export const circuitBreakers = {
-  userApi: {
-    domain: process.env.USER_API_DOMAIN ?? 'http://localhost:8081',
-    config: {
-      threshold: 5,      // 5回連続失敗でオープン
-      duration: 30000,   // 30秒間オープン状態を維持
-      minimumThroughput: 3  // 最低3回の呼び出しを要求
-    }
-  },
-  examApi: {
-    domain: process.env.EXAM_API_DOMAIN ?? 'http://localhost:8082',
-    config: {
-      threshold: 3,      // 3回連続失敗でオープン
-      duration: 60000,   // 1分間オープン状態を維持
-    }
-  },
-  adminApi: {
-    domain: process.env.ADMIN_API_DOMAIN ?? 'http://localhost:8083',
-    config: {
-      threshold: 2,      // 2回連続失敗でオープン
-      duration: 120000,  // 2分間オープン状態を維持
-      minimumThroughput: 2
-    }
-  }
-} as const;
+type EndpointInternalConfig = {
+  domain: keyof typeof domains;
+  path: string;
+  timeout: number;
+  circuitBreaker: CircuitBreakerOptions;
+  retry: RetryOptions;
+};
 
 /**
  * エンドポイントの設定一覧
+ * ドメインレイヤーからは参照されない、インフラレイヤーの内部設定
  */
-export const endpoints = {
-  getUser: {
-    domain: circuitBreakers.userApi.domain,
-    path: '/users/:id',
-    timeout: 5000
+const endpointConfigs = {
+  user: {
+    domain: 'userApi' as const,
+    defaultTimeout: 5000,
+    circuitBreaker: {
+      threshold: 5,
+      duration: 30000,
+      minimumThroughput: 3
+    },
+    retry: {
+      maxAttempts: 3,
+      backoff: {
+        initialDelay: 1000,
+        maxDelay: 5000
+      }
+    },
+    endpoints: {
+      getUser: {
+        path: '/users/:id',
+      },
+      createUser: {
+        path: '/users',
+        timeout: 10000,
+        retry: {  // 作成処理は慎重にリトライ
+          maxAttempts: 2,
+          backoff: {
+            initialDelay: 2000,
+            maxDelay: 8000
+          }
+        }
+      },
+    },
   },
-  createUser: {
-    domain: circuitBreakers.userApi.domain,
-    path: '/users',
-    timeout: 10000
+  exam: {
+    domain: 'examApi' as const,
+    defaultTimeout: 8000,
+    circuitBreaker: {
+      threshold: 3,
+      duration: 60000,
+    },
+    retry: {
+      maxAttempts: 2,  // 試験関連は少なめのリトライ
+      backoff: {
+        initialDelay: 1500,
+        maxDelay: 4000
+      }
+    },
+    endpoints: {
+      getExams: {
+        path: '/exams',
+      },
+      getExamById: {
+        path: '/exams/:id',
+        timeout: 5000,
+      },
+      submitExam: {
+        path: '/exams/:id/submit',
+        timeout: 15000,
+        retry: {  // 提出は特に慎重に
+          maxAttempts: 5,
+          backoff: {
+            initialDelay: 1000,
+            maxDelay: 10000
+          }
+        }
+      },
+    },
   },
-  getExams: {
-    domain: circuitBreakers.examApi.domain,
-    path: '/exams',
-    timeout: 8000
+  admin: {
+    domain: 'adminApi' as const,
+    defaultTimeout: 15000,
+    circuitBreaker: {
+      threshold: 2,
+      duration: 120000,
+      minimumThroughput: 2
+    },
+    retry: {
+      maxAttempts: 3,
+      backoff: {
+        initialDelay: 2000,
+        maxDelay: 8000
+      }
+    },
+    endpoints: {
+      getAdminStats: {
+        path: '/admin/stats',
+      },
+    },
   },
-  getExamById: {
-    domain: circuitBreakers.examApi.domain,
-    path: '/exams/:id',
-    timeout: 5000
-  },
-  submitExam: {
-    domain: circuitBreakers.examApi.domain,
-    path: '/exams/:id/submit',
-    timeout: 15000
-  },
-  getAdminStats: {
-    domain: circuitBreakers.adminApi.domain,
-    path: '/admin/stats',
-    timeout: 15000
-  }
 } as const;
 
+/**
+ * エンドポイントの設定を平坦化して管理
+ */
+export const endpoints = Object.entries(endpointConfigs).reduce((acc, [_, domainConfig]) => {
+  const endpoints = Object.entries(domainConfig.endpoints).reduce((endpointAcc, [key, endpoint]) => {
+    return {
+      ...endpointAcc,
+      [key]: {
+        domain: domainConfig.domain,
+        path: endpoint.path,
+        timeout: endpoint.timeout ?? domainConfig.defaultTimeout,
+        circuitBreaker: domainConfig.circuitBreaker,
+        retry: (endpoint as any).retry ?? domainConfig.retry,
+      },
+    };
+  }, {});
+  return { ...acc, ...endpoints };
+}, {}) as Record<string, EndpointInternalConfig>;
+
 export type EndpointKey = keyof typeof endpoints;
-export type CircuitBreakerKey = keyof typeof circuitBreakers;
 
 /**
  * エンドポイントの完全なURLを取得する
+ * ドメインレイヤーから呼び出される関数
  */
 export function getEndpointUrl(
   endpointKey: EndpointKey,
@@ -99,28 +170,29 @@ export function getEndpointUrl(
     resolvedPath = resolvedPath.replace(`:${key}`, value);
   });
 
-  return `${endpoint.domain}${resolvedPath}`;
+  return `${domains[endpoint.domain]}${resolvedPath}`;
 }
 
 /**
  * エンドポイントのタイムアウト時間を取得する
+ * インフラレイヤーの内部関数
  */
 export function getEndpointTimeout(endpointKey: EndpointKey): number {
   return endpoints[endpointKey].timeout;
 }
 
 /**
- * ドメインに対応するサーキットブレーカーの設定を取得する
+ * サーキットブレーカーの設定を取得する
+ * インフラレイヤーの内部関数
  */
 export function getCircuitBreakerConfig(endpointKey: EndpointKey): CircuitBreakerOptions {
-  const domain = endpoints[endpointKey].domain;
-  const breakerKey = Object.entries(circuitBreakers).find(
-    ([_, config]) => config.domain === domain
-  )?.[0] as CircuitBreakerKey;
+  return endpoints[endpointKey].circuitBreaker;
+}
 
-  if (!breakerKey) {
-    throw new Error(`No circuit breaker configuration found for domain: ${domain}`);
-  }
-
-  return circuitBreakers[breakerKey].config;
+/**
+ * リトライの設定を取得する
+ * インフラレイヤーの内部関数
+ */
+export function getRetryConfig(endpointKey: EndpointKey): RetryOptions {
+  return endpoints[endpointKey].retry;
 } 
