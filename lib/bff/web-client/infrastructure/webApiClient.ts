@@ -50,7 +50,7 @@ const createPolicies = (endpointKey: ApiEndpointKey) => {
 /**
  * WebAPIアプリケーションへのリクエストを行うクライアント
  */
-export class BffApiClient implements IApiClient {
+export class WebApiClient implements IApiClient {
   async request<R>(
     endpointKey: ApiEndpointKey,
     method: string,

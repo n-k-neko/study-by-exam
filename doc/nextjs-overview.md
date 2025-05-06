@@ -1705,12 +1705,12 @@ BFFからWebAPIへの通信実装は、以下のような構造で整理しま�
 
 ```
 /web-client
-  /infrastructure  # 技術的実装
-    bffApiClient.ts
-  endpoints.ts     # エンドポイント定義
-  types.ts        # 型定義
-  apiClient.ts    # APIクライアントインターフェース
-  index.ts        # エントリーポイント
+  /infrastructure
+    webApiClient.ts   # WebAPIへのリクエストを行うクライアント
+  bffApiClient.ts     # BFF層のAPIクライアント
+  endpoints.ts        # エンドポイント定義
+  types.ts           # 型定義
+  index.ts          # エントリーポイント
 ```
 
 ### エンドポイントの定義（endpoints.ts）
@@ -1769,14 +1769,14 @@ const endpointConfigs = {
 };
 ```
 
-### APIクライアントの実装（apiClient.ts）
+### APIクライアントの実装（bffApiClient.ts）
 
 ```typescript
 export type ApiClient = {
   [E in ApiEndpointKey]: HttpMethods<unknown>;
 };
 
-export function createApiClient(implementation: IApiClient): ApiClient {
+export function createBffApiClient(implementation: IApiClient): ApiClient {
   return new Proxy({} as ApiClient, {
     get(target, endpointKey: ApiEndpointKey) {
       return {
@@ -1793,10 +1793,10 @@ export function createApiClient(implementation: IApiClient): ApiClient {
 }
 ```
 
-### BFFApiClientの実装（infrastructure/bffApiClient.ts）
+### WebAPIクライアントの実装（infrastructure/webApiClient.ts）
 
 ```typescript
-export class BffApiClient implements IApiClient {
+export class WebApiClient implements IApiClient {
   async request<R>(
     endpointKey: ApiEndpointKey,
     method: string,
@@ -1806,38 +1806,7 @@ export class BffApiClient implements IApiClient {
   ): Promise<R> {
     const policy = createPolicies(endpointKey);
     const url = getEndpointUrl(endpointKey, params);
-    
-    const mergedOptions = {
-      ...baseConfig,
-      ...options,
-      method,
-      headers: {
-        ...baseConfig.headers,
-        ...options.headers,
-      },
-      ...(data ? { body: JSON.stringify(data) } : {})
-    };
-
-    try {
-      const response = await policy(async () => {
-        const res = await fetch(url, mergedOptions);
-        if (!res.ok) {
-          throw new Error(JSON.stringify({
-            status: res.status,
-            statusText: res.statusText,
-            data: await res.json().catch(() => ({})),
-          }));
-        }
-        return res;
-      });
-
-      return response.status === 204 ? {} as R : response.json();
-    } catch (error) {
-      if (error instanceof BrokenCircuitError) {
-        throw new Error(`Circuit breaker is open for endpoint: ${endpointKey}`);
-      }
-      throw error;
-    }
+    // ... 実装の詳細
   }
 }
 ```
@@ -1846,7 +1815,7 @@ export class BffApiClient implements IApiClient {
 
 ```typescript
 // APIクライアントのインスタンス作成
-const api = createApiClient(new BffApiClient());
+const api = createBffApiClient(new WebApiClient());
 
 // 使用例
 const user = await api.getUser.get<User>({ id: '123' });

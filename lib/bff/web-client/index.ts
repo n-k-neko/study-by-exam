@@ -1,5 +1,5 @@
-import { createApiClient } from './apiClient';
-import { BffApiClient } from './infrastructure/bffApiClient';
+import { createBffApiClient } from './bffApiClient';
+import { WebApiClient } from './infrastructure/webApiClient';
 
 /**
  * APIクライアントのエントリーポイント
@@ -23,6 +23,6 @@ import { BffApiClient } from './infrastructure/bffApiClient';
  * - 以降の同一モジュールのimportでは、作成済みの同じインスタンスが再利用される（シングルトン）
  * - テスト時のモック化や設定の動的変更が必要な場合は、ファクトリー関数として提供することも検討する
  */
-export const api = createApiClient(new BffApiClient());
-export type { ApiClient } from './apiClient';
+export const api = createBffApiClient(new WebApiClient());
+export type { ApiClient } from './bffApiClient';
 export type { ApiEndpointKey } from './types'; 

@@ -8,9 +8,9 @@ export type ApiClient = {
 };
 
 /**
- * APIクライアントを生成する
+ * BFF層のAPIクライアントを生成する
  */
-export function createApiClient(implementation: IApiClient): ApiClient {
+export function createBffApiClient(implementation: IApiClient): ApiClient {
   return new Proxy({} as ApiClient, {
     get(target, endpointKey: ApiEndpointKey) {
       return {

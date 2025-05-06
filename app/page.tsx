@@ -1,6 +1,5 @@
 import { Metadata } from 'next';
 import { Hero } from './_components/Hero';
-import { Features } from './_components/Features';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
