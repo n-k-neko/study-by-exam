@@ -24,7 +24,11 @@ declare module 'next-auth/jwt' {
   }
 }
 
-export const config: AuthOptions = {
+if (!process.env.AUTH_SECRET) {
+  throw new Error('AUTH_SECRET environment variable is not set');
+}
+
+export const config = {
   providers: [
     CredentialsProvider({
       name: 'Credentials',
@@ -60,7 +64,7 @@ export const config: AuthOptions = {
     error: '/auth/error',
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: { token: JWT, user: any }) {
       if (user && typeof user === 'object' && 'id' in user && 'role' in user) {
         const typedUser = user as CustomUser;
         token.userId = typedUser.id;
@@ -68,14 +72,16 @@ export const config: AuthOptions = {
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: Session, token: JWT }) {
       if (session.user) {
         session.user.id = token.userId as string;
         session.user.role = token.role as string;
       }
       return session;
     }
-  }
-};
+  },
+  debug: process.env.NODE_ENV === 'development',
+  secret: process.env.AUTH_SECRET
+} as unknown as AuthOptions;
 
 export const { handlers, auth, signIn, signOut } = NextAuth(config as AuthOptions); 
