@@ -38,8 +38,8 @@ export async function login(
     // NextAuth.jsでの認証
     const signInResult = await signIn('credentials', {
       user: JSON.stringify(user),
-      redirect: false,
-      callbackUrl: '/home'
+      // Server Actionでリダイレクトを制御するため、自動リダイレクトを無効化
+      redirect: false
     });
 
     if (signInResult?.error) {
@@ -52,6 +52,7 @@ export async function login(
       return { error: 'セッションの作成に失敗しました' };
     }
 
+    // 認証成功後、明示的にホーム画面にリダイレクト
     redirect('/home');
   } catch (error: any) {
     // NEXT_REDIRECTエラーは無視（正常な動作）
@@ -91,8 +92,8 @@ export async function register(
     // NextAuth.jsでの認証
     const signInResult = await signIn('credentials', {
       user: JSON.stringify(user),
-      redirect: false,
-      callbackUrl: '/home'
+      // Server Actionでリダイレクトを制御するため、自動リダイレクトを無効化
+      redirect: false
     });
 
     if (signInResult?.error) {
@@ -104,6 +105,7 @@ export async function register(
       return { error: 'セッションの作成に失敗しました' };
     }
 
+    // 認証成功後、明示的にホーム画面にリダイレクト
     redirect('/home');
   } catch (error: any) {
     if (error?.digest?.startsWith('NEXT_REDIRECT')) {

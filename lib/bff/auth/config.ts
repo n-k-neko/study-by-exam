@@ -61,7 +61,10 @@ export const config = {
     signIn: '/login',
     signOut: '/logout'
   },
+  // NextAuth.jsの認証フローをカスタマイズするためのコールバック関数群
   callbacks: {
+    // JWTトークンが作成・更新される際に呼ばれる
+    // 認証時のユーザー情報をJWTに追加する
     async jwt({ token, user }: { token: JWT, user: any }) {
       if (user && typeof user === 'object' && 'id' in user && 'role' in user) {
         const typedUser = user as CustomUser;
@@ -70,6 +73,8 @@ export const config = {
       }
       return token;
     },
+    // クライアントにセッション情報が渡される際に呼ばれる
+    // JWTの情報をセッションのuser objectに追加する
     async session({ session, token }: { session: Session, token: JWT }) {
       if (session.user) {
         session.user.id = token.userId as string;
