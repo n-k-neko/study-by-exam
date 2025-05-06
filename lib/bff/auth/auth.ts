@@ -1,4 +1,4 @@
-import NextAuth from 'next-auth';
+import NextAuth, { type AuthOptions } from 'next-auth';
 import type { DefaultSession } from 'next-auth';
 import authConfig from './auth.config';
 
@@ -11,7 +11,7 @@ declare module 'next-auth' {
   }
 }
 
-export const { auth, handlers, signIn, signOut } = NextAuth(authConfig);
+export const { auth, handlers, signIn, signOut } = NextAuth(authConfig as unknown as AuthOptions);
 
 export const GET = handlers.GET;
 export const POST = handlers.POST; 
