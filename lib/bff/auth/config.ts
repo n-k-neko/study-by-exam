@@ -60,8 +60,7 @@ export const config = {
   },
   pages: {
     signIn: '/login',
-    signOut: '/logout',
-    error: '/auth/error',
+    signOut: '/logout'
   },
   callbacks: {
     async jwt({ token, user }: { token: JWT, user: any }) {
