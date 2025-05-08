@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# 開発段階のためコメントアウト
 # env files (can opt-in for committing if needed)
-.env*
+# .env*
 
 # vercel
 .vercel

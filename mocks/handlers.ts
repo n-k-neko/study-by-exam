@@ -24,7 +24,6 @@
  */
 
 import { http, HttpResponse } from 'msw';
-import { domains } from '@/lib/bff/web-client/endpoints';
 
 // リクエストの型定義
 interface LoginRequest {
@@ -52,7 +51,7 @@ export const handlers = [
    * 3. バックエンドWebAPI → BFF: モックレスポンス
    * 4. BFF → ブラウザ: 実際のレスポンス
    */
-  http.post(`${domains.userApi}/auth/login`, async ({ request }) => {
+  http.post(`https://localhost:8080/auth/login`, async ({ request }) => {
     const body = await request.json() as LoginRequest;
     const { loginId, password } = body;
 
@@ -83,7 +82,7 @@ export const handlers = [
    * 3. バックエンドWebAPI → BFF: モックレスポンス
    * 4. BFF → ブラウザ: 実際のレスポンス
    */
-  http.get(`${domains.userApi}/users/me`, () => {
+  http.get(`https://localhost:8080/users/me`, () => {
     // 認証済みユーザーの詳細情報を返却
     return HttpResponse.json({
       id: '1',

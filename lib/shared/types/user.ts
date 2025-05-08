@@ -2,18 +2,18 @@
  * ユーザー関連の型定義
  */
 
-export type User = {
+export interface User {
   id: string;
-  email: string;
   userId: string;
+  email: string;
+  role: string;
   createdAt: string;
   updatedAt: string;
-};
+}
 
-export type UserProfile = {
+export interface UserProfile {
   id: string;
+  name: string;
   email: string;
-  userId: string;
-  createdAt: string;
-  updatedAt: string;
-}; 
+  role: string;
+}

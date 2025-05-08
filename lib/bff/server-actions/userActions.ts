@@ -4,9 +4,9 @@ import { redirect } from 'next/navigation';
 import { auth, signIn, signOut } from '@/lib/bff/auth/auth';
 import { loginSchema } from '@/lib/shared/validation/auth';
 import { registerSchema } from '@/lib/shared/validation/registration';
-import type { LoginCredentials } from '@/lib/shared/validation/auth';
-import type { RegisterCredentials } from '@/lib/shared/validation/registration';
-import { UserClient } from '../web-client/user';
+import type { LoginCredentials } from '@/lib/shared/types/auth';
+import type { RegisterCredentials } from '@/lib/shared/types/registration';
+import { userApi } from '../web-client/user';
 
 interface ActionState {
   error?: string;
@@ -35,7 +35,7 @@ export async function login(
 
   try {
     // バックエンドAPIで認証
-    const user = await UserClient.login(formData);
+    const user = await userApi.login(formData);
 
     // NextAuth.jsでの認証
     const signInResult = await signIn('credentials', {
@@ -89,7 +89,7 @@ export async function register(
 
   try {
     // ユーザー登録APIの呼び出し
-    const user = await UserClient.register(formData);
+    const user = await userApi.register(formData);
 
     // NextAuth.jsでの認証
     const signInResult = await signIn('credentials', {

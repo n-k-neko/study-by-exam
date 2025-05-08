@@ -1,11 +1,12 @@
-import type { LoginCredentials } from '@/lib/shared/validation/auth';
+import type { z } from 'zod';
+import type { loginSchema, authResponseSchema } from '../validation/auth';
 
 /**
- * 認証関連の型定義
+ * ログイン認証情報
  */
+export type LoginCredentials = z.infer<typeof loginSchema>;
 
-// 認証レスポンス
-export type AuthResponse = {
-  id: string;
-  role: string;
-}; 
+/**
+ * 認証レスポンス
+ */
+export type AuthResponse = z.infer<typeof authResponseSchema>; 
