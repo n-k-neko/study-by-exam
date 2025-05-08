@@ -1,19 +1,12 @@
 import { api } from './';
 import type { LoginCredentials, RegisterCredentials, AuthResponse } from '@/lib/shared/types/auth';
+import { ApiResponse } from '@/lib/shared/types/api';
 
 export type UserProfile = {
   id: string;
   name: string;
   email: string;
   role: string;
-};
-
-export type ApiResponse<T> = {
-  success: true;
-  data: T;
-} | {
-  success: false;
-  error: string;
 };
 
 export class UserClient {
