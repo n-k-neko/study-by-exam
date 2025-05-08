@@ -2629,3 +2629,175 @@ Middlewareはエッジランタイム（Edge Runtime）で実行されます。�
    ```
 
 このように、Middlewareはエッジでの高速な認証チェックを提供しますが、その制限を理解し、適切な役割分担を行うことが重要です。セキュリティ上重要な処理は必ずアプリケーションサーバー側で実行し、Middlewareはルーティングレベルの基本的なチェックに留めるべきです。
+
+## MSW（Mock Service Worker）によるAPIモック
+
+### 1. 基本設定
+
+MSWは、APIリクエストをインターセプトしてモックレスポンスを返すためのライブラリです。開発環境でのバックエンドAPIのモックに使用します。
+
+#### ファイル構造
+```
+/mocks
+  /handlers.ts  # モックの定義
+  /server.ts    # サーバーインスタンスのエクスポート
+  /browser.ts   # ブラウザ環境でのワーカー設定
+  /node.ts      # 開発環境でのサーバー起動
+```
+
+### 2. 初期化処理
+
+`app/layout.tsx`で環境に応じたMSWの初期化を行います：
+
+```typescript
+/**
+ * MSWの初期化
+ * 
+ * 主な責務：
+ * - 環境（サーバーサイド/クライアントサイド）に応じたMSWの初期化
+ * - 開発環境でのみMSWを起動
+ * 
+ * 初期化の流れ：
+ * 1. サーバーサイド（SSR）の場合：
+ *    - server.tsのサーバーインスタンスをインポート
+ *    - サーバーサイドでのAPIモックを有効化
+ * 
+ * 2. クライアントサイドの場合：
+ *    - browser.tsのワーカーをインポート
+ *    - ブラウザ環境でのAPIモックを有効化
+ * 
+ * 環境判定の仕組み：
+ * - typeof window === 'undefined'
+ *   - true: サーバーサイド（windowオブジェクトが存在しない）
+ *   - false: クライアントサイド（windowオブジェクトが存在する）
+ * 
+ * 注意：
+ * - 開発環境でのみ初期化を実行
+ * - 本アプリケーションではBFFを経由するため、
+ *   クライアントサイドのモックは実際には使用されない
+ */
+const initMocks = async () => {
+  if (typeof window === 'undefined') {
+    const { server } = await import('@/mocks/server');
+    server.listen();
+  } else {
+    const { worker } = await import('@/mocks/browser');
+    worker.start();
+  }
+};
+
+if (process.env.NODE_ENV === 'development') {
+  initMocks();
+}
+```
+
+### 3. サーバーサイドの設定
+
+`server.ts`はサーバーインスタンスの定義とエクスポートを担当します：
+
+```typescript
+/**
+ * MSWサーバーインスタンスの定義とエクスポート
+ * 
+ * 責務：
+ * - サーバーインスタンスの定義
+ * - ハンドラーの適用
+ * - サーバーインスタンスのエクスポート
+ * 
+ * 注意：
+ * - サーバーインスタンスの定義はこのファイルの責務
+ * - サーバーの起動はapp/layout.tsxで行う
+ */
+import { setupServer } from 'msw/node';
+import { handlers } from './handlers';
+
+export const server = setupServer(...handlers);
+```
+
+### 4. ブラウザ環境の設定
+
+`browser.ts`はブラウザ環境でのワーカー設定を担当します：
+
+```typescript
+/**
+ * MSWワーカーの設定
+ * 
+ * 責務：
+ * - ブラウザ環境でのMSWワーカーの設定
+ * - ハンドラーの適用
+ * 
+ * 注意：
+ * - 本アプリケーションではBFFを経由するため、
+ *   ブラウザ環境でのモックは実際には使用されない
+ * - 開発環境でのみ自動的に起動する
+ */
+import { setupWorker } from 'msw/browser';
+import { handlers } from './handlers';
+
+export const worker = setupWorker(...handlers);
+```
+
+### 5. ハンドラーの定義
+
+`handlers.ts`でAPIエンドポイントごとのモックレスポンスを定義します：
+
+```typescript
+import { http, HttpResponse } from 'msw';
+
+export const handlers = [
+  // GETリクエストのモック
+  http.get('/api/users/:id', ({ params }) => {
+    return HttpResponse.json({
+      id: params.id,
+      name: 'Mock User',
+      // ... その他のユーザー情報
+    });
+  }),
+
+  // POSTリクエストのモック
+  http.post('/api/users', async ({ request }) => {
+    const body = await request.json();
+    return HttpResponse.json({
+      id: 'new-user-id',
+      ...body,
+    });
+  }),
+
+  // その他のエンドポイントのモック
+];
+```
+
+### 6. 未処理リクエストの設定
+
+開発環境では、モックが定義されていないリクエストを実際のサーバーに転送する設定が可能です：
+
+```typescript
+// server.listenのオプション
+server.listen({
+  onUnhandledRequest: 'bypass'  // 未処理のリクエストを実際のサーバーに転送
+});
+```
+
+オプション：
+- `'bypass'`: 未処理リクエストを実際のサーバーに転送（開発環境向け）
+- `'error'`: 未処理リクエストをエラーとして扱う（テスト環境向け）
+- `'warn'`: 未処理リクエストに対して警告を出す（開発環境向け）
+
+### 7. アーキテクチャ上の注意点
+
+1. **BFFアーキテクチャとの関係**
+   - クライアント→BFFの通信はモックしない
+   - BFF→バックエンドの通信のみをモック
+   - ブラウザ環境でのモックは実質的に使用されない
+
+2. **環境による動作の違い**
+   - 開発環境：MSWが有効
+   - 本番環境：MSWは無効化
+   - テスト環境：必要に応じて有効化
+
+3. **セキュリティ考慮事項**
+   - モックデータに機密情報を含めない
+   - 本番環境では必ず無効化
+   - テストデータは適切に管理
+
+このように、MSWを使用することで、開発環境でのバックエンドAPIのモックを効率的に行うことができます。特にBFFアーキテクチャでは、サーバーサイドでのモックが重要となり、クライアントサイドのモックは実質的に使用されない設計となっています。

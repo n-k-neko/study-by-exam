@@ -1,3 +1,28 @@
+/**
+ * MSWのハンドラー定義ファイル
+ * 
+ * 主な責務：
+ * - 通信のモック定義
+ * - 開発環境でのAPIレスポンスのシミュレーション
+ * 
+ * 本アプリケーションでの使用：
+ * - BFFからバックエンドWebAPIへの通信のみをモック
+ * - ブラウザからBFFへの通信はモックしない（実際のBFFを使用）
+ * 
+ * アーキテクチャの説明：
+ * 1. ブラウザ → BFF → バックエンドWebAPI
+ * 2. ブラウザからBFFへの通信はモックしない（実際のBFFを使用）
+ * 3. BFFからバックエンドWebAPIへの通信のみをモック
+ * 
+ * モックの対象：
+ * - BFFがバックエンドWebAPIに送信するリクエスト
+ * - バックエンドWebAPIからのレスポンス
+ * 
+ * モックしない対象：
+ * - ブラウザからBFFへのリクエスト
+ * - BFFからブラウザへのレスポンス
+ */
+
 import { http, HttpResponse } from 'msw';
 import { domains } from '@/lib/bff/web-client/endpoints';
 
@@ -17,7 +42,16 @@ const mockUsers = [
 ];
 
 export const handlers = [
-  // ログインAPI
+  /**
+   * バックエンドWebAPIのログインエンドポイントをモック
+   * BFFからのリクエストをインターセプトし、モックレスポンスを返却
+   * 
+   * フロー：
+   * 1. ブラウザ → BFF: 実際のリクエスト
+   * 2. BFF → バックエンドWebAPI: このハンドラーでモック
+   * 3. バックエンドWebAPI → BFF: モックレスポンス
+   * 4. BFF → ブラウザ: 実際のレスポンス
+   */
   http.post(`${domains.userApi}/auth/login`, async ({ request }) => {
     const body = await request.json() as LoginRequest;
     const { loginId, password } = body;
@@ -39,7 +73,16 @@ export const handlers = [
     });
   }),
 
-  // ユーザー情報取得API
+  /**
+   * バックエンドWebAPIのユーザー情報取得エンドポイントをモック
+   * BFFからのリクエストをインターセプトし、モックレスポンスを返却
+   * 
+   * フロー：
+   * 1. ブラウザ → BFF: 実際のリクエスト
+   * 2. BFF → バックエンドWebAPI: このハンドラーでモック
+   * 3. バックエンドWebAPI → BFF: モックレスポンス
+   * 4. BFF → ブラウザ: 実際のレスポンス
+   */
   http.get(`${domains.userApi}/users/me`, () => {
     // 認証済みユーザーの詳細情報を返却
     return HttpResponse.json({

@@ -1,11 +1,38 @@
-import { http, HttpResponse } from 'msw';
-import { setupServer } from 'msw/node';
-import { handlers } from './handlers';
+/**
+ * Node.js環境でのMSWサーバー起動ファイル
+ * 
+ * 主な責務：
+ * - 開発環境でのMSWサーバーの起動
+ * - サーバーインスタンスの初期化と設定
+ * 
+ * 使用箇所：
+ * - サーバーサイドレンダリング（SSR）時のAPIモック
+ * - サーバーサイドのテスト実行時
+ * 
+ * 注意：
+ * - このファイルはサーバーの起動のみを担当
+ * - サーバーインスタンスの定義は server.ts で行う
+ * - 開発環境でのみサーバーを起動
+ * 
+ * サーバー設定の説明：
+ * onUnhandledRequest: 'bypass'
+ * - 定義されていないリクエスト（ハンドラーで定義されていないエンドポイントへのリクエスト）の扱いを指定
+ * - 'bypass': 定義されていないリクエストをそのまま通過させる
+ *   - モックされていないエンドポイントへのリクエストは実際のサーバーに転送
+ *   - 開発中に便利（一部のエンドポイントのみをモックしつつ、他のエンドポイントは実際のサーバーを使用可能）
+ * - その他のオプション：
+ *   - 'error': 定義されていないリクエストをエラーとして扱う（テスト環境で有用）
+ *   - 'warn': 定義されていないリクエストを警告として扱う（開発中に便利）
+ * 
+ * 本アプリケーションでの使用：
+ * - BFFからバックエンドWebAPIへの通信のみをモック
+ * - モックされていないエンドポイントへのリクエストは実際のバックエンドWebAPIに転送
+ * - 開発環境での柔軟な動作が可能
+ */
 
-export const server = setupServer(...handlers);
+import { server } from './server';
 
 // 開発環境でのみモックサーバーを起動
 if (process.env.NODE_ENV === 'development') {
   server.listen({ onUnhandledRequest: 'bypass' });
-  console.log('🔶 Mock Service Worker started');
 } 
