@@ -1,14 +1,11 @@
-export interface AuthResponse {
+import type { LoginCredentials } from '@/lib/shared/validation/auth';
+
+/**
+ * 認証関連の型定義
+ */
+
+// 認証レスポンス
+export type AuthResponse = {
   id: string;
   role: string;
-}
-
-export interface LoginCredentials {
-  loginId: string;
-  password: string;
-}
-
-export interface RegisterCredentials extends LoginCredentials {
-  email: string;
-  confirmPassword: string;
-} 
+}; 

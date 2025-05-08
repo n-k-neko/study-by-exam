@@ -2,8 +2,10 @@
 
 import { redirect } from 'next/navigation';
 import { auth, signIn, signOut } from '@/lib/bff/auth/auth';
-import { loginSchema, registerSchema } from '@/lib/shared/validation/auth';
-import type { LoginCredentials, RegisterCredentials } from '@/lib/shared/types/auth';
+import { loginSchema } from '@/lib/shared/validation/auth';
+import { registerSchema } from '@/lib/shared/validation/registration';
+import type { LoginCredentials } from '@/lib/shared/validation/auth';
+import type { RegisterCredentials } from '@/lib/shared/validation/registration';
 import { UserClient } from '../web-client/user';
 
 interface ActionState {
@@ -68,7 +70,7 @@ export async function register(
   data: FormData
 ): Promise<ActionState> {
   const formData: RegisterCredentials = {
-    loginId: data.get('userId') as string,
+    userId: data.get('userId') as string,
     email: data.get('email') as string,
     password: data.get('password') as string,
     confirmPassword: data.get('confirmPassword') as string,

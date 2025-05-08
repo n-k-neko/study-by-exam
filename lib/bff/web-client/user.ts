@@ -1,5 +1,7 @@
 import { api } from './';
-import type { LoginCredentials, RegisterCredentials, AuthResponse } from '@/lib/shared/types/auth';
+import type { AuthResponse } from '@/lib/shared/types/auth';
+import type { LoginCredentials } from '@/lib/shared/validation/auth';
+import type { RegisterCredentials } from '@/lib/shared/types/registration';
 import { ApiResponse } from '@/lib/shared/types/api';
 
 export type UserProfile = {
