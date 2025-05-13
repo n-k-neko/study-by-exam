@@ -67,6 +67,9 @@ export const authConfig = {
     })
   ],
   // セッション設定
+  // JWT戦略を使用してステートレスな認証を実現
+  // - セッション情報はJWTトークンとしてCookieに保存
+  // - サーバーサイドでセッション情報を保持しない（ステートレス）
   session: {
     strategy: 'jwt' as const, // JWTを使用したセッション管理
     maxAge: 7 * 24 * 60 * 60, // セッションの有効期限（7日間）
@@ -86,21 +89,36 @@ export const authConfig = {
     // 通常はここでログインページにリダイレクトするなどの処理を行う
   },
   // 認証フローのカスタマイズ
+  // セッションとJWTの関係：
+  // - セッションはJWTトークンから安全に抽出された情報を提供するインターフェース
+  // - JWTトークンは暗号化され、Cookieに保存される
+  // - クライアントは生のJWTトークンに直接アクセスできない
+  // - セッションのuserオブジェクトのみがクライアント側で利用可能
+  //
+  // auth()関数の動作：
+  // 1. クッキーからJWTトークンを取得
+  // 2. JWTトークンを検証（署名の確認、有効期限の確認など）
+  // 3. 検証済みのJWTトークンから情報を抽出
+  // 4. sessionコールバックを通じてセッション情報を生成
+  // セッション情報は永続化されず、毎回のリクエストでJWTトークンから動的に生成される
   callbacks: {
     // JWTトークンが作成・更新される際に呼ばれる
+    // authorize関数で返却されたユーザー情報をJWTトークンに追加
     async jwt({ token, user }: { token: JWT, user: any }) {
       if (user && typeof user === 'object' && 'id' in user && 'role' in user) {
         const typedUser = user as AuthenticatedUserBase;
-        // ユーザー情報をJWTに追加
+        // ユーザー情報をJWTトークンに追加（この情報は暗号化される）
         token.userId = typedUser.id;
         token.role = typedUser.role;
       }
       return token;
     },
-    // セッション情報がクライアントに渡される際に呼ばれる
+    // セッション情報が生成される際に呼ばれる
+    // auth()関数が呼ばれるたびに、JWTトークンから情報を抽出してセッションを生成
     async session({ session, token }: { session: Session, token: JWT }) {
       if (session.user) {
-        // JWTの情報をセッションのuser objectに追加
+        // JWTトークンから安全に抽出した情報をセッションのuser objectに追加
+        // この情報のみがクライアント側で利用可能
         session.user.id = token.userId;
         session.user.role = token.role;
       }
