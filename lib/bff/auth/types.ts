@@ -8,12 +8,13 @@
 
 import type { DefaultSession } from 'next-auth';
 
-// 認証済みユーザーの基本情報を表す型
-// JWTとセッションに保存される最小限の情報
-export type AuthenticatedUserBase = {
-  id: string;    // ユーザーの一意識別子
-  role: string;  // ユーザーの権限情報
-};
+/**
+ * 認証済みユーザーの基本情報
+ */
+export interface AuthenticatedUserBase {
+  id: string;
+  role: string;
+}
 
 // NextAuth.jsの型定義を拡張
 // アプリケーション全体で使用される認証関連の型定義
@@ -23,15 +24,21 @@ declare module 'next-auth' {
   interface User extends AuthenticatedUserBase {}
 
   // Session型の拡張：クライアントで利用可能なユーザー情報を定義
-  interface Session extends DefaultSession {
-    user: AuthenticatedUserBase & DefaultSession['user']
+  interface Session {
+    user: {
+      id: string;
+      role: string;
+    } & DefaultSession['user']
   }
 }
 
-// JWT型の拡張：トークンに含める情報を定義
+/**
+ * NextAuthのJWT型の拡張
+ * JWTトークンにuserIdとroleを追加
+ */
 declare module 'next-auth/jwt' {
   interface JWT {
-    userId: string;  // ユーザーの一意識別子
-    role: string;    // ユーザーの権限情報
+    userId: string;
+    role: string;
   }
 } 

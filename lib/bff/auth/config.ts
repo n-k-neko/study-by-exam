@@ -11,12 +11,9 @@
  * このファイルは設定のみを扱い、実際の認証機能は auth.ts でエクスポートされる
  */
 
-import NextAuth from 'next-auth';
-import type { DefaultSession } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
 import type { Session } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import type { AuthResponse } from '@/lib/shared/types/auth';
 import type { AuthenticatedUserBase } from './types';
 
 if (!process.env.AUTH_SECRET) {
@@ -55,7 +52,7 @@ export const authConfig = {
         try {
           // signInから渡されたJSON文字列をパース
           // 例: '{"id":"abc","role":"USER"}' → { id: 'abc', role: 'USER' }
-          const user = JSON.parse(credentials.user) as { id: string; role: string };
+          const user = JSON.parse(credentials.user) as AuthenticatedUserBase;
           // NextAuth.jsのセッションで使用するユーザー情報を返却
           // この返却値は signIn の結果として使用され、NextAuthのセッションに保存される
           // 例: { id: 'abc', role: 'USER' } が返却され、signInの結果として使用される
@@ -71,13 +68,22 @@ export const authConfig = {
   ],
   // セッション設定
   session: {
-    strategy: 'jwt', // JWTを使用したセッション管理
+    strategy: 'jwt' as const, // JWTを使用したセッション管理
     maxAge: 7 * 24 * 60 * 60, // セッションの有効期限（7日間）
   },
   // カスタムページのパス設定
+  // NextAuthのデフォルトの認証関連ページのパスを、アプリケーション独自のページに変更
+  // この設定がない場合：
+  // - NextAuthのデフォルトの認証ページ（/api/auth/signinなど）が使用される
+  // - デフォルトのUIが表示される
+  // - カスタマイズが難しい
   pages: {
     signIn: '/login', // ログインページのパス
+    // 未認証ユーザーが保護されたページにアクセスした時や
+    // セッションが切れた時に /login にリダイレクト
     signOut: '/logout' // ログアウトページのパス
+    // ログアウト処理後に /logout にリダイレクト
+    // 通常はここでログインページにリダイレクトするなどの処理を行う
   },
   // 認証フローのカスタマイズ
   callbacks: {
@@ -95,8 +101,8 @@ export const authConfig = {
     async session({ session, token }: { session: Session, token: JWT }) {
       if (session.user) {
         // JWTの情報をセッションのuser objectに追加
-        session.user.id = token.userId as string;
-        session.user.role = token.role as string;
+        session.user.id = token.userId;
+        session.user.role = token.role;
       }
       return session;
     }

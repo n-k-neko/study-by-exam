@@ -60,7 +60,6 @@ export async function login(
 
     // セッションの確認
     const session = await auth();
-    console.log(session);
     if (!session?.user) {
       return { error: 'セッションの作成に失敗しました' };
     }
