@@ -24,17 +24,13 @@
  */
 
 import { http, HttpResponse } from 'msw';
+import { LoginCredentials } from '@/lib/shared/types/auth';
 
-// リクエストの型定義
-interface LoginRequest {
-  loginId: string;
-  password: string;
-}
 
 // モック用のユーザーデータ
 const mockUsers = [
   {
-    loginId: 'abc',
+    userId: 'abc',
     password: 'password123',
     role: 'USER'
   }
@@ -52,11 +48,11 @@ export const handlers = [
    * 4. BFF → ブラウザ: 実際のレスポンス
    */
   http.post(`https://localhost:8080/auth/login`, async ({ request }) => {
-    const body = await request.json() as LoginRequest;
-    const { loginId, password } = body;
+    const body = await request.json() as LoginCredentials;
+    const { userId, password } = body;
 
     // ユーザー認証
-    const user = mockUsers.find(u => u.loginId === loginId && u.password === password);
+    const user = mockUsers.find(u => u.userId === userId && u.password === password);
 
     if (!user) {
       return new HttpResponse(
@@ -67,8 +63,10 @@ export const handlers = [
 
     // 認証成功時のレスポンス
     return HttpResponse.json({
-      id: user.loginId,
-      role: user.role
+      user: {
+        id: user.userId,
+        role: user.role
+      }
     });
   }),
 
@@ -86,7 +84,7 @@ export const handlers = [
     // 認証済みユーザーの詳細情報を返却
     return HttpResponse.json({
       id: '1',
-      loginId: 'test@example.com',
+      userId: 'test@example.com',
       name: 'テストユーザー',
       email: 'test@example.com',
       role: 'USER',

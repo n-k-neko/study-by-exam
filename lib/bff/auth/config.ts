@@ -11,9 +11,10 @@
  * このファイルは設定のみを扱い、実際の認証機能は auth.ts でエクスポートされる
  */
 
-import NextAuth, { type AuthOptions } from 'next-auth';
+import NextAuth from 'next-auth';
+import type { DefaultSession } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
-import type { Session, DefaultSession } from 'next-auth';
+import type { Session } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import type { AuthResponse } from '@/lib/shared/types/auth';
 import type { AuthenticatedUserBase } from './types';
@@ -23,21 +24,41 @@ if (!process.env.AUTH_SECRET) {
 }
 
 // NextAuth.jsの設定オブジェクト
-export const authConfig: AuthOptions = {
+export const authConfig = {
+  // 認証プロバイダーの設定
   providers: [
     CredentialsProvider({
       name: 'Credentials',
-      // バックエンドAPIで認証済みのユーザー情報のみを受け取る
+      // フォームから受け取る認証情報の定義
+      // signIn('credentials', { user: JSON.stringify(user) }) で渡された値が
+      // このuserフィールドにマッピングされる
+      // 例: '{"id":"abc","role":"USER"}' が credentials.user として渡される
       credentials: {
-        user: { label: "User", type: "text" }
+        user: { 
+          label: "User", 
+          type: "text",  // JSON文字列を受け取るため、text
+          description: "ユーザー情報（JSON文字列形式）" 
+        }
       },
-      async authorize(credentials) {
-        if (!credentials?.user) {
+      // 認証処理の実装
+      // credentials.user には signIn から渡されたJSON文字列が入っている
+      // Partial<Record<"user", unknown>> は NextAuthが定義している型
+      // - Record<"user", unknown>: userキーに対してunknown型の値を持つオブジェクト
+      // - Partial<...>: すべてのプロパティをオプショナルにする
+      // 結果として credentials は { user?: unknown } という型になる
+      // 実行時には signIn から文字列が渡されるので { user: string } となる
+      async authorize(credentials: Partial<Record<"user", unknown>>) {
+        if (!credentials?.user || typeof credentials.user !== 'string') {
           return null;
         }
 
         try {
-          const user = JSON.parse(credentials.user) as AuthResponse;
+          // signInから渡されたJSON文字列をパース
+          // 例: '{"id":"abc","role":"USER"}' → { id: 'abc', role: 'USER' }
+          const user = JSON.parse(credentials.user) as { id: string; role: string };
+          // NextAuth.jsのセッションで使用するユーザー情報を返却
+          // この返却値は signIn の結果として使用され、NextAuthのセッションに保存される
+          // 例: { id: 'abc', role: 'USER' } が返却され、signInの結果として使用される
           return {
             id: user.id,
             role: user.role
@@ -48,45 +69,43 @@ export const authConfig: AuthOptions = {
       }
     })
   ],
+  // セッション設定
   session: {
-    strategy: 'jwt',
-    maxAge: 7 * 24 * 60 * 60, // 7日間
+    strategy: 'jwt', // JWTを使用したセッション管理
+    maxAge: 7 * 24 * 60 * 60, // セッションの有効期限（7日間）
   },
+  // カスタムページのパス設定
   pages: {
-    signIn: '/login',
-    signOut: '/logout'
+    signIn: '/login', // ログインページのパス
+    signOut: '/logout' // ログアウトページのパス
   },
-  // NextAuth.jsの認証フローをカスタマイズするためのコールバック関数群
+  // 認証フローのカスタマイズ
   callbacks: {
     // JWTトークンが作成・更新される際に呼ばれる
-    // 認証時のユーザー情報をJWTに追加する
     async jwt({ token, user }: { token: JWT, user: any }) {
       if (user && typeof user === 'object' && 'id' in user && 'role' in user) {
         const typedUser = user as AuthenticatedUserBase;
+        // ユーザー情報をJWTに追加
         token.userId = typedUser.id;
         token.role = typedUser.role;
       }
       return token;
     },
-    // クライアントにセッション情報が渡される際に呼ばれる
-    // JWTの情報をセッションのuser objectに追加する
+    // セッション情報がクライアントに渡される際に呼ばれる
     async session({ session, token }: { session: Session, token: JWT }) {
       if (session.user) {
+        // JWTの情報をセッションのuser objectに追加
         session.user.id = token.userId as string;
         session.user.role = token.role as string;
       }
       return session;
     }
   },
-  // 開発環境でのみデバッグログを有効にする
-  // true: 認証フローの詳細なログを出力
-  // false: 最小限のログのみ出力
+  // 開発環境でのみデバッグログを有効化
   debug: process.env.NODE_ENV === 'development',
-  // JWTの署名と暗号化に使用する秘密鍵
-  // 環境変数AUTH_SECRETから取得
-  // 注意: 本番環境では32文字以上のランダムな文字列を使用すること
+  // JWTの署名に使用する秘密鍵
   secret: process.env.AUTH_SECRET
-} as unknown as AuthOptions;
+};
 
 // NextAuth.jsの設定をエクスポート
 // 実際の認証機能（handlers, auth, signIn, signOut）は auth.ts でエクスポート

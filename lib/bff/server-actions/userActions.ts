@@ -6,7 +6,7 @@ import { loginSchema } from '@/lib/shared/validation/auth';
 import { registerSchema } from '@/lib/shared/validation/registration';
 import type { LoginCredentials } from '@/lib/shared/types/auth';
 import type { RegisterCredentials } from '@/lib/shared/types/registration';
-import { userApi } from '../web-client/user';
+import { userApi } from '@/lib/bff/web-client/user';
 
 interface ActionState {
   error?: string;
@@ -18,7 +18,7 @@ export async function login(
   data: FormData
 ): Promise<ActionState> {
   const formData: LoginCredentials = {
-    loginId: data.get('loginId') as string,
+    userId: data.get('userId') as string,
     password: data.get('password') as string,
   };
   
@@ -35,21 +35,32 @@ export async function login(
 
   try {
     // バックエンドAPIで認証
-    const user = await userApi.login(formData);
+    const response = await userApi.login(formData);
+    
+    // 認証が失敗した場合
+    if (!response.user) {
+      return { error: '認証に失敗しました' };
+    }
 
-    // NextAuth.jsでの認証
+    const user = response.user;  // { id: 'abc', role: 'USER' } （オブジェクト形式）
+
+    // 認証済みのユーザー情報を基にNextAuthのセッションを作成
     const signInResult = await signIn('credentials', {
+      // NextAuthのCredentialsProviderは文字列形式のデータしか受け付けないため、
+      // ユーザー情報をJSON文字列に変換して渡す
+      // 例: { id: 'abc', role: 'USER' } → '{"id":"abc","role":"USER"}'
+      // authorize関数側でJSON.parseして再度オブジェクトに戻して処理する
       user: JSON.stringify(user),
-      // Server Actionでリダイレクトを制御するため、自動リダイレクトを無効化
       redirect: false
     });
 
     if (signInResult?.error) {
-      return { error: 'サインインに失敗しました' };
+      return { error: 'セッションの作成に失敗しました' };
     }
 
     // セッションの確認
     const session = await auth();
+    console.log(session);
     if (!session?.user) {
       return { error: 'セッションの作成に失敗しました' };
     }

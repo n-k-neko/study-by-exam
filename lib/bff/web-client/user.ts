@@ -43,9 +43,9 @@ export const userApi = {
   /**
    * ログイン
    */
-  async login(credentials: LoginCredentials, options?: RequestOptions): Promise<ApiResponse<AuthResponse>> {
+  async login(credentials: LoginCredentials, options?: RequestOptions): Promise<AuthResponse> {
     const url = 'https://localhost:8080/auth/login';
-    return fetchApi<AuthResponse>(url, {
+    const response : ApiResponse<AuthResponse> = await fetchApi<AuthResponse>(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -54,6 +54,14 @@ export const userApi = {
       body: JSON.stringify(credentials),
       timeout: 10000,
     });
+
+    // TODO: エラーハンドリング
+    // ここにたどり着くということはリトライやCircuitBreakerの設定がうまくいっていないということ？
+    // if (response.status !== 200) {
+    //   throw new Error('ログインに失敗しました');
+    // }
+
+    return response.data;
   },
 
   /**

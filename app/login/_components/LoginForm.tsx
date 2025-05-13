@@ -4,7 +4,8 @@ import { useFormState, useFormStatus } from 'react-dom';
 import { login } from '@/lib/bff/server-actions/userActions';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { loginSchema, type LoginCredentials } from '@/lib/shared/validation/auth';
+import { loginSchema } from '@/lib/shared/validation/auth';
+import { LoginCredentials } from '@/lib/shared/types/auth';
 import { startTransition } from 'react';
 
 function SubmitButton() {
@@ -50,33 +51,33 @@ export function LoginForm() {
   return (
     <form onSubmit={onSubmit}>
       <div>
-        <label htmlFor="loginId" className="block text-xl font-bold text-blue-900">
-          ユーザーIDまたはメールアドレス
+        <label htmlFor="userId" className="block text-xl font-bold text-blue-900">
+          ユーザーID
         </label>
         <div className="mt-2">
           <input
-            id="loginId"
-            {...register('loginId')}
+            id="userId"
+            {...register('userId')}
             type="text"
             autoComplete="username"
             className="appearance-none block w-full px-5 py-4 border-2 border-blue-200 rounded-xl shadow-sm placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg bg-white"
-            placeholder="ユーザーIDまたはメールアドレス"
-            aria-invalid={!!errors.loginId}
-            aria-describedby={errors.loginId ? "loginId-error" : undefined}
+            placeholder="ユーザーID"
+            aria-invalid={!!errors.userId}
+            aria-describedby={errors.userId ? "userId-error" : undefined}
           />
-          {errors.loginId && (
-            <p id="loginId-error" role="alert">
-              {errors.loginId.message}
+          {errors.userId && (
+            <p id="userId-error" role="alert">
+              {errors.userId.message}
             </p>
           )}
-          {serverState?.errors?.loginId && (
-            <ErrorMessage error={serverState.errors.loginId} />
+          {serverState?.errors?.userId && (
+            <ErrorMessage error={serverState.errors.userId} />
           )}
         </div>
       </div>
 
       <div>
-        <label htmlFor="password" className="block text-xl font-bold text-blue-900">
+        <label htmlFor="password" className="block text-xl font-bold text-blue-900 mt-4">
           パスワード
         </label>
         <div className="mt-2">

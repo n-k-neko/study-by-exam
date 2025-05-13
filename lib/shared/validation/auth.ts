@@ -16,8 +16,8 @@ import { z } from 'zod';
  * ログイン認証情報のスキーマ
  */
 export const loginSchema = z.object({
-  loginId: z.string()
-    .min(3, 'ユーザーIDまたはメールアドレスは3文字以上で入力してください'),
+  userId: z.string()
+    .min(3, 'ユーザーIDは3文字以上で入力してください'),
   password: z.string()
     .min(8, 'パスワードは8文字以上で入力してください'),
 });
@@ -26,10 +26,8 @@ export const loginSchema = z.object({
  * 認証レスポンスのスキーマ
  */
 export const authResponseSchema = z.object({
-  token: z.string(),
   user: z.object({
     id: z.string(),
-    email: z.string().email(),
-    role: z.string(),
+    role: z.string()
   }),
 }); 

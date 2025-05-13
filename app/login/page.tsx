@@ -14,9 +14,9 @@ export default function LoginPage() {
       <div className="max-w-lg mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center">
-            <h2 className="text-4xl font-black text-blue-900 mb-2">
+            <div className="text-4xl font-black text-blue-900 mb-2">
               ログイン
-            </h2>
+            </div>
             <p className="text-lg text-blue-700">
               または{' '}
               <a href="/register" className="font-bold text-blue-900 hover:text-blue-700 underline">
@@ -24,7 +24,7 @@ export default function LoginPage() {
               </a>
             </p>
           </div>
-          <div className="mt-8">
+          <div className="mt-4">
             <LoginForm />
           </div>
         </div>
