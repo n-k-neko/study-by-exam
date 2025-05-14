@@ -1,7 +1,7 @@
 import { defaultApiConfig, getApiConfig } from '@/lib/bff/web-client/config/api';
-import type { ApiConfig } from '@/lib/shared/types/api/config';
-import type { RequestOptions } from '@/lib/shared/types/api/request';
-import type { ApiResponse } from '@/lib/shared/types/api/response';
+import type { ApiConfig } from '@/lib/bff/web-client/types/config';
+import type { RequestOptions } from '@/lib/bff/web-client/types/request';
+import type { ApiResponse } from '@/lib/bff/web-client/types/response';
 
 /**
  * ドメインから設定を取得

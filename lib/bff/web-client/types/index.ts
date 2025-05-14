@@ -6,4 +6,5 @@
  * - BFF固有の実装詳細の型定義
  */
 
-export * from './cache'; 
+export * from './cache';
+export * from './api'; 

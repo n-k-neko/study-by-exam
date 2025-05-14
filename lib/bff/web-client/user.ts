@@ -1,5 +1,4 @@
-import { RequestOptions } from '@/lib/shared/types/api/request';
-import { ApiResponse } from '@/lib/shared/types/api/response';
+import { ApiResponse } from '@/lib/bff/web-client/types/response';
 import { fetchApi } from './api/client';
 import type { User, UserProfile } from '@/lib/shared/types/user';
 import type { AuthResponse, LoginCredentials } from '@/lib/shared/types/auth';
