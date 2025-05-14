@@ -41,14 +41,36 @@ async function withRetry<T>(
 
 /**
  * サーキットブレーカー
+ * 
+ * 目的：
+ * - 障害が発生しているサービスへのリクエストを一時的に停止
+ * - システム全体の保護
+ * - リソースの無駄な消費を防止
+ * 
+ * 動作の仕組み：
+ * 1. 連続失敗回数をカウント
+ * 2. 失敗回数が閾値を超えたら、サーキットを開く（リクエストを拒否）
+ * 3. 一定時間後にサーキットを閉じて再試行
  */
 class CircuitBreaker {
-  private failures = 0;
-  private lastFailureTime = 0;
-  private isOpen = false;
+  private failures = 0;          // 連続失敗回数
+  private lastFailureTime = 0;   // 最後の失敗時刻
+  private isOpen = false;        // サーキットの状態（開いている/閉じている）
 
   constructor(private config: ApiConfig) {}
 
+  /**
+   * リクエストを実行
+   * 
+   * 1. サーキットが開いている場合：
+   *    - リセットタイムアウトを過ぎていれば、サーキットを閉じて再試行
+   *    - リセットタイムアウトを過ぎていなければ、エラーを投げる
+   * 
+   * 2. サーキットが閉じている場合：
+   *    - リクエストを実行
+   *    - 成功したら失敗カウントをリセット
+   *    - 失敗したら失敗カウントを増やし、閾値を超えたらサーキットを開く
+   */
   async execute<T>(fn: () => Promise<T>): Promise<T> {
     if (this.isOpen) {
       const now = Date.now();
@@ -75,6 +97,20 @@ class CircuitBreaker {
       throw error;
     }
   }
+}
+
+// ドメインごとのサーキットブレーカーを保持するMap
+const circuitBreakers = new Map<string, CircuitBreaker>();
+
+/**
+ * ドメインに対応するサーキットブレーカーを取得
+ * 存在しない場合は新規作成
+ */
+function getCircuitBreaker(domain: string, config: ApiConfig): CircuitBreaker {
+  if (!circuitBreakers.has(domain)) {
+    circuitBreakers.set(domain, new CircuitBreaker(config));
+  }
+  return circuitBreakers.get(domain)!;
 }
 
 /**
@@ -133,11 +169,13 @@ export async function fetchApi<T>(
   //   - timeout: リクエストのタイムアウト時間（ミリ秒）
   //   - retryCount: リトライ回数
   //   - retryDelay: リトライ間隔（ミリ秒）
+  // RequestInitは、fetch APIの標準的なオプション（method, headers, bodyなど）
   // 必要な項目のみを指定可能。すべてのプロパティはオプショナル。
-  options: CacheOptions & RequestOptions = {}
+  options: CacheOptions & RequestOptions & RequestInit = {}
 ): Promise<ApiResponse<T>> {
   const domainConfig = getDomainConfig(url);
-  const circuitBreaker = new CircuitBreaker(domainConfig);
+  const domain = new URL(url).host;
+  const circuitBreaker = getCircuitBreaker(domain, domainConfig);
 
   const timeout = options.timeout || domainConfig.timeout;
   const controller = new AbortController();
