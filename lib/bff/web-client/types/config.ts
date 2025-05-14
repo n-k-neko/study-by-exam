@@ -1,22 +1,22 @@
 /**
- * APIの共通設定
+ * HTTP通信の回復力設定
  */
-export interface ApiConfig {
+export interface ResilienceConfig {
     timeout: number;
     retry: {
-      maxAttempts: number;
-      initialDelay: number;
-      maxDelay: number;
+        maxAttempts: number;
+        initialDelay: number;
+        maxDelay: number;
     };
     circuitBreaker: {
-      failureThreshold: number;
-      resetTimeout: number;
+        failureThreshold: number;
+        resetTimeout: number;
     };
-  }
+}
   
-  /**
-   * ドメインごとのAPI設定
-   */
-  export interface DomainConfig {
-    [domain: string]: ApiConfig;
-  } 
+/**
+ * ドメインごとの回復力設定
+ */
+export interface DomainResilienceConfig {
+    [domain: string]: ResilienceConfig;
+} 

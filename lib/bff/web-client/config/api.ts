@@ -1,9 +1,9 @@
-import type { ApiConfig, DomainConfig } from '@/lib/bff/web-client/types/config';
+import type { ResilienceConfig, DomainResilienceConfig } from '@/lib/bff/web-client/types/config';
 
 /**
  * デフォルトのAPI設定
  */
-export const defaultApiConfig: ApiConfig = {
+export const defaultApiConfig: ResilienceConfig = {
   timeout: 5000,
   retry: {
     maxAttempts: 3,
@@ -19,8 +19,8 @@ export const defaultApiConfig: ApiConfig = {
 /**
  * 環境変数からAPI設定を読み込む
  */
-function loadApiConfig(): DomainConfig {
-  const config: DomainConfig = {};
+function loadApiConfig(): DomainResilienceConfig {
+  const config: DomainResilienceConfig = {};
   
   // 環境変数から設定を読み込む
   const domains = process.env.API_DOMAINS?.split(',') || [];
@@ -46,12 +46,12 @@ function loadApiConfig(): DomainConfig {
 /**
  * シングルトンとして設定を保持
  */
-let apiConfig: DomainConfig | null = null;
+let apiConfig: DomainResilienceConfig | null = null;
 
 /**
  * API設定を取得
  */
-export function getApiConfig(): DomainConfig {
+export function getApiConfig(): DomainResilienceConfig {
   if (!apiConfig) {
     apiConfig = loadApiConfig();
   }
