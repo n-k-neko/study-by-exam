@@ -1,9 +1,10 @@
 import type { ResilienceConfig, DomainResilienceConfig } from '@/lib/bff/web-client/types/config';
 
 /**
- * デフォルトのAPI設定
+ * デフォルトのResilience設定
+ * （タイムアウト、リトライ、サーキットブレーカー）
  */
-export const defaultApiConfig: ResilienceConfig = {
+export const defaultResilienceConfig: ResilienceConfig = {
   timeout: 5000,
   retry: {
     maxAttempts: 3,
@@ -19,7 +20,7 @@ export const defaultApiConfig: ResilienceConfig = {
 /**
  * 環境変数からAPI設定を読み込む
  */
-function loadApiConfig(): DomainResilienceConfig {
+function loadResilienceConfig(): DomainResilienceConfig {
   const config: DomainResilienceConfig = {};
   
   // 環境変数から設定を読み込む
@@ -27,15 +28,15 @@ function loadApiConfig(): DomainResilienceConfig {
   
   domains.forEach(domain => {
     config[domain] = {
-      timeout: Number(process.env[`${domain}_TIMEOUT`]) || defaultApiConfig.timeout,
+      timeout: Number(process.env[`${domain}_TIMEOUT`]) || defaultResilienceConfig.timeout,
       retry: {
-        maxAttempts: Number(process.env[`${domain}_RETRY_MAX_ATTEMPTS`]) || defaultApiConfig.retry.maxAttempts,
-        initialDelay: Number(process.env[`${domain}_RETRY_INITIAL_DELAY`]) || defaultApiConfig.retry.initialDelay,
-        maxDelay: Number(process.env[`${domain}_RETRY_MAX_DELAY`]) || defaultApiConfig.retry.maxDelay,
+        maxAttempts: Number(process.env[`${domain}_RETRY_MAX_ATTEMPTS`]) || defaultResilienceConfig.retry.maxAttempts,
+        initialDelay: Number(process.env[`${domain}_RETRY_INITIAL_DELAY`]) || defaultResilienceConfig.retry.initialDelay,
+        maxDelay: Number(process.env[`${domain}_RETRY_MAX_DELAY`]) || defaultResilienceConfig.retry.maxDelay,
       },
       circuitBreaker: {
-        failureThreshold: Number(process.env[`${domain}_CIRCUIT_BREAKER_FAILURE_THRESHOLD`]) || defaultApiConfig.circuitBreaker.failureThreshold,
-        resetTimeout: Number(process.env[`${domain}_CIRCUIT_BREAKER_RESET_TIMEOUT`]) || defaultApiConfig.circuitBreaker.resetTimeout,
+        failureThreshold: Number(process.env[`${domain}_CIRCUIT_BREAKER_FAILURE_THRESHOLD`]) || defaultResilienceConfig.circuitBreaker.failureThreshold,
+        resetTimeout: Number(process.env[`${domain}_CIRCUIT_BREAKER_RESET_TIMEOUT`]) || defaultResilienceConfig.circuitBreaker.resetTimeout,
       },
     };
   });
@@ -51,9 +52,9 @@ let apiConfig: DomainResilienceConfig | null = null;
 /**
  * API設定を取得
  */
-export function getApiConfig(): DomainResilienceConfig {
+export function getResilienceConfig(): DomainResilienceConfig {
   if (!apiConfig) {
-    apiConfig = loadApiConfig();
+    apiConfig = loadResilienceConfig();
   }
   return apiConfig;
 } 

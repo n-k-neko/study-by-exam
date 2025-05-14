@@ -1,39 +1,49 @@
-import { defaultApiConfig, getApiConfig } from '@/lib/bff/web-client/config/api';
+import { defaultResilienceConfig, getResilienceConfig } from '@/lib/bff/web-client/config/api';
 import type { ResilienceConfig } from '@/lib/bff/web-client/types/config';
 import type { RequestOptions } from '@/lib/bff/web-client/types/request';
 import type { ApiResponse } from '@/lib/bff/web-client/types/response';
 import type { CacheOptions } from '@/lib/bff/web-client/types/cache';
 import { 
-  Policy, 
   retry, 
   timeout, 
   circuitBreaker, 
   handleAll,
   ExponentialBackoff,
   ConsecutiveBreaker,
-  TimeoutStrategy 
+  TimeoutStrategy,
+  RetryPolicy,
+  CircuitBreakerPolicy
 } from 'cockatiel';
 
 /**
- * ドメインから設定を取得
+ * URLのドメインから回復力設定を取得
+ * 
+ * タイムアウト、リトライ、サーキットブレーカーの設定を
+ * ドメインごとに取得し、見つからない場合はデフォルト設定を返す
+ * 
+ * @param url リクエスト先のURL
+ * @returns ドメインに対応するResilienceConfig
  */
 function getDomainConfig(url: string): ResilienceConfig {
   const urlObj = new URL(url);
   const domain = urlObj.host;
-  const config = getApiConfig();
-  return config[domain] || defaultApiConfig;
+  const config = getResilienceConfig();
+  return config[domain] || defaultResilienceConfig;
 }
 
-// ドメインごとのポリシーを保持するMap
-const policies = new Map<string, any>();
+// ドメインのみをキーとして、リトライとサーキットブレーカーを共有
+const policies = new Map<string, {
+  retry: RetryPolicy;
+  circuitBreaker: CircuitBreakerPolicy;
+}>();
 
 /**
- * ドメインに対応するポリシーを取得
+ * ドメインに対応するCockatielのポリシーを取得
  * 存在しない場合は新規作成
  */
 function getPolicy(domain: string, config: ResilienceConfig, timeoutMs: number) {
-  const key = `${domain}-${timeoutMs}`;
-  if (!policies.has(key)) {
+  if (!policies.has(domain)) {
+    // リトライとサーキットブレーカーはドメインで共有
     const retryPolicy = retry(handleAll, {
       maxAttempts: config.retry.maxAttempts,
       backoff: new ExponentialBackoff({
@@ -41,28 +51,26 @@ function getPolicy(domain: string, config: ResilienceConfig, timeoutMs: number) 
       }),
     });
     
-    // Correct timeout usage with TimeoutStrategy
-    const timeoutPolicy = timeout(timeoutMs, TimeoutStrategy.Cooperative);
-    
     const cbPolicy = circuitBreaker(handleAll, {
       halfOpenAfter: config.circuitBreaker.resetTimeout,
       breaker: new ConsecutiveBreaker(config.circuitBreaker.failureThreshold),
     });
     
-    // Manual policy combination
-    const policy = {
-      execute: async (fn: () => Promise<any>) => {
-        return await retryPolicy.execute(() =>
-          timeoutPolicy.execute(() =>
-            cbPolicy.execute(fn)
-          )
-        );
-      }
-    };
-    
-    policies.set(key, policy);
+    policies.set(domain, { retry: retryPolicy, circuitBreaker: cbPolicy });
   }
-  return policies.get(key)!;
+  
+  const { retry: retryPolicy, circuitBreaker: cbPolicy } = policies.get(domain)!;
+  // タイムアウトのみリクエストごとに作成
+  const timeoutPolicy = timeout(timeoutMs, TimeoutStrategy.Cooperative);
+  
+  return {
+    execute: async (fn: () => Promise<any>) => 
+      retryPolicy.execute(() =>
+        timeoutPolicy.execute(() =>
+          cbPolicy.execute(fn)
+        )
+      )
+  };
 }
 
 /**
@@ -81,8 +89,6 @@ function getPolicy(domain: string, config: ResilienceConfig, timeoutMs: number) 
  * // リクエスト設定のみ指定
  * await fetchApi<User>('/api/users', {
  *   timeout: 5000,
- *   retryCount: 3,
- *   retryDelay: 1000
  * });
  * 
  * // 両方の設定を指定
@@ -92,8 +98,6 @@ function getPolicy(domain: string, config: ResilienceConfig, timeoutMs: number) 
  *   tags: ['users'],
  *   // リクエスト設定
  *   timeout: 5000,
- *   retryCount: 3,
- *   retryDelay: 1000
  * });
  */
 export async function fetchApi<T>(
@@ -102,10 +106,9 @@ export async function fetchApi<T>(
   // CacheOptionsは、Next.jsのfetch APIで使用するキャッシュ設定の型定義（業務ドメインの関心事）
   //   - revalidate: キャッシュの有効期限（秒）
   //   - tags: キャッシュの無効化に使用するタグ
-  // RequestOptionsは、リクエストのタイムアウトやリトライなどの設定の型定義（インフラ層の関心事）
+  // RequestOptionsは、リクエストのタイムアウトの設定の型定義（インフラ層の関心事）
+  // リトライ、サーキットブレーカなどは、ドメインごとの設定を環境変数から読み込む。
   //   - timeout: リクエストのタイムアウト時間（ミリ秒）
-  //   - retryCount: リトライ回数
-  //   - retryDelay: リトライ間隔（ミリ秒）
   // RequestInitは、fetch APIの標準的なオプション（method, headers, bodyなど）
   // 必要な項目のみを指定可能。すべてのプロパティはオプショナル。
   options: CacheOptions & RequestOptions & RequestInit = {}
