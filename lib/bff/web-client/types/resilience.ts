@@ -1,5 +1,5 @@
 /**
- * HTTP通信の回復力設定
+ * HTTP通信の耐障害性設定
  */
 export interface ResilienceConfig {
     timeout: number;
@@ -15,7 +15,7 @@ export interface ResilienceConfig {
 }
   
 /**
- * ドメインごとの回復力設定
+ * ドメインごとの耐障害性設定
  */
 export interface DomainResilienceConfig {
     [domain: string]: ResilienceConfig;
