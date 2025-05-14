@@ -2,7 +2,7 @@
  * APIリクエストのオプション
  */
 export interface RequestOptions {
-    timeout?: number;  // タイムアウト秒数（ミリ秒）
+    timeout?: number
     retry?: {
       maxAttempts?: number;
       initialDelay?: number;

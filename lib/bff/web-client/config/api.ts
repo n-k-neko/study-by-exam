@@ -1,4 +1,4 @@
-import type { ApiConfig, DomainConfig } from '@/lib/shared/types/api/config';
+import type { ApiConfig, DomainConfig } from '@/lib/bff/web-client/types/config';
 
 /**
  * デフォルトのAPI設定
