@@ -3,7 +3,7 @@ import { fetchApi } from './api/client';
 import type { User, UserProfile } from '@/lib/shared/types/user';
 import type { AuthResponse, LoginCredentials } from '@/lib/shared/types/auth';
 import type { RegisterCredentials } from '@/lib/shared/types/registration';
-import type { CacheOptions } from './types/index';
+import type { CacheOptions } from '@/lib/bff/web-client/types/cache';
 
 /**
  * ユーザー関連のAPIリクエスト
@@ -41,14 +41,23 @@ export const userApi = {
    */
   async login(credentials: LoginCredentials, options?: CacheOptions): Promise<AuthResponse> {
     const url = 'https://localhost:8080/auth/login';
-    const response : ApiResponse<AuthResponse> = await fetchApi<AuthResponse>(url, {
+    
+    // 基本的なリクエストオプション
+    const requestOptions = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(credentials),
       timeout: 10000,
-    });
+    };
+    
+    // optionsが指定されている場合のみ、キャッシュ設定を追加
+    const finalOptions = options 
+      ? { ...requestOptions, ...options }
+      : requestOptions;
+    
+    const response: ApiResponse<AuthResponse> = await fetchApi<AuthResponse>(url, finalOptions);
 
     // TODO: エラーハンドリング
     // ここにたどり着くということはリトライやCircuitBreakerの設定がうまくいっていないということ？
