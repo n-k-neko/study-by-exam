@@ -1,10 +1,15 @@
 import Link from 'next/link';
+import { LogoutButton } from './LogoutButton';
+import { auth } from '@/lib/bff/auth/auth';
 
 interface HeaderProps {
   pageTitle?: string;
 }
 
-export function Header({ pageTitle }: HeaderProps) {
+export async function Header({ pageTitle }: HeaderProps) {
+  const session = await auth();
+  const isLoggedIn = !!session?.user;
+
   return (
     <header className="bg-blue-600">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -23,6 +28,11 @@ export function Header({ pageTitle }: HeaderProps) {
               </div>
             )}
           </div>
+          {isLoggedIn && (
+            <div className="flex items-center">
+              <LogoutButton />
+            </div>
+          )}
         </div>
       </div>
     </header>

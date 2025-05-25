@@ -120,6 +120,15 @@ export async function register(
 
 export async function logout(): Promise<ActionState> {
   try {
+    // ログアウト前にセッション情報を取得
+    const session = await auth();
+    if (session?.user) {
+      // TODO: ログアウト情報をログに記録
+      // 例: ユーザーID、ロール、ログアウト時刻などを記録
+      // console.log(`[LOGOUT] User ${session.user.id} (${session.user.role}) logged out at ${new Date().toISOString()}`);
+      // 実際の実装では、ログサービスやデータベースに記録する
+    }
+
     await signOut({
       redirectTo: '/login'
     });
