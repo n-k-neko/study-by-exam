@@ -51,23 +51,14 @@ export async function login(
       // 例: { id: 'abc', role: 'USER' } → '{"id":"abc","role":"USER"}'
       // authorize関数側でJSON.parseして再度オブジェクトに戻して処理する
       user: JSON.stringify(user),
-      redirect: false
+      redirectTo: '/home'
     });
 
-    if (signInResult?.error) {
-      return { error: 'セッションの作成に失敗しました' };
-    }
+    // 正常系の戻り値を返す（実際にはリダイレクトされるため、この値は使用されない）
+    return {};
 
-    // セッションの確認
-    const session = await auth();
-    if (!session?.user) {
-      return { error: 'セッションの作成に失敗しました' };
-    }
-
-    // 認証成功後、明示的にホーム画面にリダイレクト
-    redirect('/home');
   } catch (error: any) {
-    // NEXT_REDIRECTエラーは無視（正常な動作）
+    // NEXT_REDIRECTエラーは無視（Next.jsの仕様に伴う正常な動作。NextAuthはNext.jsのリダイレクトを使用するため、このエラーが発生する。）
     if (error?.digest?.startsWith('NEXT_REDIRECT')) {
       throw error;
     }
@@ -129,13 +120,16 @@ export async function register(
 
 export async function logout(): Promise<ActionState> {
   try {
-    await signOut();
-    redirect('/login');
+    await signOut({
+      redirectTo: '/login'
+    });
+    // 正常系の戻り値を返す（実際にはリダイレクトされるため、この値は使用されない）
+    return {};
   } catch (error: any) {
+    // NEXT_REDIRECTエラーは無視（Next.jsの仕様に伴う正常な動作。NextAuthはNext.jsのリダイレクトを使用するため、このエラーが発生する。）
     if (error?.digest?.startsWith('NEXT_REDIRECT')) {
       throw error;
     }
     return { error: 'ログアウトに失敗しました' };
   }
-  return {};
 } 

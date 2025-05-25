@@ -74,19 +74,36 @@ export const authConfig = {
     strategy: 'jwt' as const, // JWTを使用したセッション管理
     maxAge: 7 * 24 * 60 * 60, // セッションの有効期限（7日間）
   },
+  // Cookieのセキュリティ設定
+  cookies: {
+    sessionToken: {
+      name: 'next-auth.session-token',
+      options: {
+        httpOnly: true,      // JavaScriptからのアクセスを防止
+        secure: true,        // HTTPSのみで送信
+        sameSite: 'lax' as const,  // CSRF対策（lax: 同一サイトとGETリクエストを許可）
+        path: '/',           // すべてのパスで有効
+        maxAge: 7 * 24 * 60 * 60,  // 7日間有効（セッション設定と合わせる）
+      },
+    },
+    // CSRFトークン用のCookie設定
+    csrfToken: {
+      name: 'next-auth.csrf-token',
+      options: {
+        httpOnly: true,      // JavaScriptからのアクセスを防止
+        secure: true,        // HTTPSのみで送信
+        sameSite: 'lax' as const,  // CSRF対策
+        path: '/',           // すべてのパスで有効
+      },
+    },
+  },
   // カスタムページのパス設定
-  // NextAuthのデフォルトの認証関連ページのパスを、アプリケーション独自のページに変更
-  // この設定がない場合：
-  // - NextAuthのデフォルトの認証ページ（/api/auth/signinなど）が使用される
-  // - デフォルトのUIが表示される
-  // - カスタマイズが難しい
+  // Auth.js v5ではデフォルトの認証ページは提供されないため、
+  // アプリケーション独自の認証ページを指定する必要がある
   pages: {
     signIn: '/login', // ログインページのパス
     // 未認証ユーザーが保護されたページにアクセスした時や
     // セッションが切れた時に /login にリダイレクト
-    signOut: '/logout' // ログアウトページのパス
-    // ログアウト処理後に /logout にリダイレクト
-    // 通常はここでログインページにリダイレクトするなどの処理を行う
   },
   // 認証フローのカスタマイズ
   // セッションとJWTの関係：
