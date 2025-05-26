@@ -53,12 +53,12 @@ import type { UserRepository } from '../application/repository/user';
 import { implementations } from './implementations';
 
 // リポジトリを取得する関数
-export function getRepository<T>(): T {
-  const implementation = implementations.get(Object.getPrototypeOf(this).constructor);
+export function getRepository(interfaceType: Function): unknown {
+  const implementation = implementations.get(interfaceType);
   if (!implementation) {
-    throw new Error(`Repository implementation not found for ${this.constructor.name}`);
+    throw new Error(`Repository implementation not found for ${interfaceType.name}`);
   }
-  return implementation as T;
+  return implementation;
 }
 
 // lib/bff/container/implementations.ts
@@ -98,7 +98,7 @@ export async function login(formData: FormData) {
   'use server';
   
   // リポジトリの取得
-  const userRepository = getRepository<UserRepository>();
+  const userRepository = getRepository(UserRepository) as UserRepository;
   
   // リポジトリの使用
   const result = await userRepository.login({
